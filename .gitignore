@@ -1,0 +1,28 @@
+/build/
+.cache/
+.vscode/
+.idea/
+*.elf
+*.bin
+*.hex
+*.map
+*.su
+compile_commands.json
+
+# CubeMX copied optional CMSIS packs that are not referenced by this target.
+/Drivers/CMSIS/Core/
+/Drivers/CMSIS/Core_A/
+/Drivers/CMSIS/DSP/
+/Drivers/CMSIS/Include/
+/Drivers/CMSIS/Lib/
+/Drivers/CMSIS/NN/
+/Drivers/CMSIS/RTOS/
+/Drivers/CMSIS/RTOS2/
+/Drivers/CMSIS/docs/
+
+# Only the files referenced by the current CMake target are force-tracked.
+/Drivers/CMSIS/Device/ST/STM32F1xx/Include/
+/Drivers/CMSIS/Device/ST/STM32F1xx/Source/
+/Drivers/STM32F1xx_HAL_Driver/Inc/
+/Drivers/STM32F1xx_HAL_Driver/Src/
+/Middlewares/Third_Party/FreeRTOS/Source/
