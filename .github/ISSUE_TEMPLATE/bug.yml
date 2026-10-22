@@ -1,0 +1,47 @@
+name: Bug report
+description: 报告可复现的固件、通信或硬件联调问题
+title: "fix: "
+labels: [bug]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 问题表现
+      description: 说明观察到的现象、期望行为和影响范围。
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: 验证环境
+      options:
+        - static
+        - build
+        - bench
+        - wearable
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: 硬件与固件环境
+      description: 填写硬件版本、固件提交、供电、连接、采样率和上位机版本。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 提供最短、稳定的复现步骤和出现概率。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence_data
+    attributes:
+      label: 证据
+      description: 提供串口日志、逻辑分析仪截图、错误计数或相关数据文件位置。不要上传密钥或个人数据。
+  - type: textarea
+    id: recovery
+    attributes:
+      label: 临时恢复方式
+      description: 例如重新上电、复位传感器、降低采样率或切换固件版本。

@@ -1,0 +1,44 @@
+name: Firmware Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  debug-build:
+    name: ARM GCC Debug build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install GNU Arm Embedded Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-arm-none-eabi ninja-build
+
+      - name: Configure
+        run: cmake --preset Debug
+
+      - name: Build
+        run: cmake --build --preset Debug
+
+      - name: Report firmware size
+        run: arm-none-eabi-size -A build/Debug/Spinal_tester.elf
+
+      - name: Upload ELF and map file
+        uses: actions/upload-artifact@v4
+        with:
+          name: spinal-tester-debug-${{ github.sha }}
+          path: |
+            build/Debug/Spinal_tester.elf
+            build/Debug/Spinal_tester.map
+          if-no-files-found: error
+          retention-days: 14

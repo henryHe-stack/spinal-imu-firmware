@@ -1,0 +1,42 @@
+name: Engineering task
+description: 提交驱动、协议、算法、硬件联调或文档任务
+title: "task: "
+labels: [task]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: 目标
+      description: 用可验收的语言说明完成后系统新增什么能力。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围与接口
+      description: 列出涉及目录、输入输出、任务所有权和明确不包含的内容。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 给出可执行的构建、台架或佩戴测试和通过阈值。
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: 目标证据等级
+      options:
+        - static
+        - build
+        - bench
+        - wearable
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖与风险
+      description: 列出硬件、数据、其他模块和主要失败风险。
