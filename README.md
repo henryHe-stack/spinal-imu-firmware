@@ -1,10 +1,12 @@
-# Spinal IMU Firmware
+# Spinal IMU System
 
 [![Firmware Build](https://github.com/henryHe-stack/spinal-imu-firmware/actions/workflows/firmware-build.yml/badge.svg)](https://github.com/henryHe-stack/spinal-imu-firmware/actions/workflows/firmware-build.yml)
 
-基于 STM32F103C8T6、FreeRTOS、TCA9548A 和 3 颗 BNO055 的后颈柔性 IMU 采集固件。项目用于颈部 C0、C4、C7 三个区域的姿态采集、无线传输与后续区域相对运动分析。
+基于 STM32F103C8T6、FreeRTOS、TCA9548A 和 3 颗 BNO055 的后颈柔性 IMU 采集固件与浏览器监测上位机。项目用于颈部 C0、C4、C7 三个区域的姿态采集、数据传输、可视化与区域相对运动分析。
 
 > 当前状态：`v0.1.0.0` 固件框架基线。任务调度、模块边界和构建链已经建立；BNO055 完整配置、UART DMA 协议、微秒时间戳和颈部姿态算法仍是明确标注的占位接口，尚未经过实物板验证。
+
+上位机已实现姿态重建、数据曲线、采集诊断三个工作窗口及共享历史回放，已通过单元测试与模拟串口浏览器测试；尚未完成 STM32 实物串口联调。
 
 ## 硬件基线
 
@@ -55,6 +57,7 @@ Config/       任务、队列和业务参数
 Devices/      TCA9548A、BNO055 器件驱动
 Services/     传感、协议、诊断和算法接口
 Tasks/        FreeRTOS 任务入口
+HostApp/      Web Serial 上位机、三节点姿态与颈椎三维可视化
 Core/         CubeMX 生成代码，仅在 USER CODE 区接入
 Drivers/      STM32 HAL / CMSIS
 Middlewares/  FreeRTOS
@@ -89,6 +92,25 @@ cmake --build --preset Debug
 | Flash | 29,956 B / 64 KB | 45.71% |
 
 这些数字只代表当前 Debug 构建，不代表最终功能版本或运行期栈余量已经验证。
+
+## 上位机
+
+`HostApp/` 提供浅色学术仪器风格的浏览器上位机：
+
+- **姿态重建**：驾驶坐姿人体、透明座椅、突出的颈椎结构与三个独立 IMU 位姿视图；支持旋转、平移、缩放和预设视角。
+- **数据曲线**：三个节点的 Roll/Pitch/Yaw、加速度与角速度，以及 C0–C4、C4–C7、C0–C7 相对旋转角；支持图例筛选、缩放、平移、悬停读数与选帧。
+- **采集诊断**：同步跨度、解析错误、接收字节和原始数据流。
+- **共享时间轴**：点击时间戳或曲线、逐帧与倍速回放、中立位归零、返回实时；切换窗口期间持续采集。
+
+使用桌面版 Chrome/Edge 和 Node.js 18+ 启动：
+
+```powershell
+cd HostApp
+npm ci
+npm start
+```
+
+打开 <http://127.0.0.1:4173>，点击“运行模拟数据”即可预览。串口连接使用 Web Serial，数据也可导出为 CSV。当前固件线上协议尚未冻结，因此上位机暂以 NDJSON/CSV 文本帧联调；加速度、角速度保留传输原始值，单位由固件协议约定。格式、测试命令和重建边界见 [HostApp/README.md](HostApp/README.md)。
 
 ## CubeMX 再生成规则
 
@@ -142,4 +164,4 @@ git switch -c feature/<module>-<short-description>
 
 ## 许可
 
-当前仓库用于项目组内部研发，未附带开源许可证。未经项目负责人明确授权，不得对外再分发。
+本仓库公开展示项目代码，原创代码目前未指定开源许可证。第三方组件遵循各自许可证：STM32 HAL/CMSIS 与 FreeRTOS 见对应目录，Three.js 与 Inter 字体见 [HostApp/vendor/README.md](HostApp/vendor/README.md)。

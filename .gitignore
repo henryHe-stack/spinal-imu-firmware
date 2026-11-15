@@ -1,4 +1,8 @@
 /build/
+/HostApp/node_modules/
+/HostApp/qa/
+/HostApp/test-results/
+/HostApp/playwright-report/
 .cache/
 .vscode/
 .idea/

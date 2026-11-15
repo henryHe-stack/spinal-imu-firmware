@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <title>驾驶员颈椎姿态监测工作站</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div>
+          <p class="eyebrow">CERVICAL KINEMATICS · C0 / C4 / C7</p>
+          <h1>驾驶员颈椎姿态监测<span class="brand-edition">工作站</span></h1>
+        </div>
+      </div>
+      <div class="toolbar" aria-label="采集控制">
+        <div class="port-config">
+          <label for="baudRate">波特率</label>
+          <select id="baudRate">
+            <option>115200</option>
+            <option>230400</option>
+            <option>460800</option>
+            <option>921600</option>
+          </select>
+        </div>
+        <button id="demoButton" class="button button-secondary" type="button">运行模拟数据</button>
+        <button id="connectButton" class="button button-primary" type="button">
+          <span class="button-dot"></span><span>连接串口</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div class="workspace-heading"><div><span class="page-kicker">运动学观测 / 驾驶工况</span><p>三节点姿态、区域运动与时间回看</p></div><span class="session-indicator"><i></i> 本地采集工作区</span></div>
+      <nav class="workspace-nav" aria-label="工作窗口">
+        <div class="workspace-tabs" role="tablist" aria-label="监测工作窗口">
+          <button id="tab-pose" type="button" role="tab" aria-selected="true" aria-controls="window-pose" tabindex="0" data-window="pose"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 2 6 3v9l-6 4-6-4V5Zm-6 3 6 4 6-4M10 9v9" /></svg>姿态重建</button>
+          <button id="tab-curves" type="button" role="tab" aria-selected="false" aria-controls="window-curves" tabindex="-1" data-window="curves"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3v14h14M4 12l3-5 4 7 3-9 3 5" /></svg>数据曲线</button>
+          <button id="tab-diagnostics" type="button" role="tab" aria-selected="false" aria-controls="window-diagnostics" tabindex="-1" data-window="diagnostics"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h4l2-6 4 12 2-6h4M4 3h12M4 17h3" /></svg>采集诊断</button>
+        </div>
+        <span class="workspace-nav-note">共享采集 · 同步回看</span>
+      </nav>
+      <section class="system-strip" aria-label="系统状态">
+        <div class="status-primary">
+          <span id="connectionLamp" class="status-lamp status-idle"></span>
+          <div>
+            <span class="metric-label">采集链路</span>
+            <strong id="connectionText">等待连接</strong>
+          </div>
+        </div>
+        <div class="metric"><span class="metric-label">接收频率</span><strong><span id="sampleRate">0.0</span> Hz</strong></div>
+        <div class="metric"><span class="metric-label">接收帧</span><strong id="frameCount">0</strong></div>
+        <div class="metric"><span class="metric-label">丢帧估计</span><strong id="lostCount">0</strong></div>
+        <div class="metric"><span class="metric-label">显示帧时间</span><strong id="latestTimestamp">—</strong></div>
+        <div class="strip-actions">
+          <button id="neutralButton" class="text-button" type="button">设为中立位</button>
+          <button id="exportButton" class="text-button" type="button">导出 CSV</button>
+        </div>
+      </section>
+
+      <section id="window-pose" class="workspace-window" role="tabpanel" aria-labelledby="tab-pose">
+      <div class="main-grid">
+        <article class="panel spine-panel">
+          <header class="panel-heading">
+            <div>
+              <p class="section-index">DRIVER DIGITAL TWIN</p>
+              <h2>颈椎姿态重建</h2>
+            </div>
+            <div class="legend" aria-label="节点图例">
+              <span><i class="dot dot-c0"></i>C0 枕骨区</span>
+              <span><i class="dot dot-c4"></i>C4 中颈区</span>
+              <span><i class="dot dot-c7"></i>C7 颈胸交界</span>
+            </div>
+          </header>
+          <div class="scene-toolbar">
+            <div class="view-presets" aria-label="模型预设视角">
+              <button type="button" data-preset="driver" aria-pressed="true">全身视角</button>
+              <button type="button" data-preset="back" aria-pressed="false">后侧观察</button>
+              <button type="button" data-preset="neck" aria-pressed="false">颈部聚焦</button>
+            </div>
+            <div class="layer-controls"><label><input id="seatGhost" type="checkbox" checked />座椅透视</label><label><input id="bodyGhost" type="checkbox" checked />人体透视</label></div>
+          </div>
+          <div class="spine-stage">
+            <canvas id="spineCanvas" aria-label="由 C0、C4、C7 姿态驱动的驾驶员人体与脊柱模型"></canvas>
+            <div class="view-tools" data-view="spine" aria-label="驾驶员模型视图控制">
+              <button type="button" data-action="zoom-in" title="放大视图" aria-label="放大视图">+</button>
+              <button type="button" data-action="zoom-out" title="缩小视图" aria-label="缩小视图">−</button>
+              <button type="button" data-action="reset" title="复位视角" aria-label="复位视角">↺</button>
+            </div>
+            <div class="axis-key" aria-hidden="true">
+              <span class="axis-x">X 左右</span>
+              <span class="axis-y">Y 头足</span>
+              <span class="axis-z">Z 前后</span>
+            </div>
+            <div class="model-note" role="status">
+              <span class="scene-status-dot"></span>
+              <strong id="modelState">等待三节点数据</strong>
+            </div>
+            <div class="scene-caption"><span>区域姿态示意</span><span>拖动旋转 · 滚轮缩放 · 右键平移</span></div>
+          </div>
+          <footer class="relative-readouts">
+            <div><span>C0 → C4 相对角</span><strong id="c0c4Angle">—</strong></div>
+            <div><span>C4 → C7 相对角</span><strong id="c4c7Angle">—</strong></div>
+            <div><span>C0 → C7 总相对角</span><strong id="c0c7Angle">—</strong></div>
+          </footer>
+          <section class="timeline-panel" aria-label="姿态时间轴">
+            <header>
+              <div><h3>姿态回看</h3><span class="timeline-description">选择时间，联动查看模型、曲线与节点姿态</span></div>
+              <div class="timeline-status"><span id="timelineMode" class="live-badge">实时</span><div><strong id="timelineCurrent">—</strong><span id="timelineHostTime" class="timeline-host-time">等待采集数据</span></div></div>
+            </header>
+            <div class="timeline-body">
+              <div class="timeline-chart-wrap"><span class="chart-label">C0–C7 相对角</span><canvas id="timelineCanvas" aria-label="点击曲线选择历史姿态"></canvas><input id="timelineRange" type="range" min="0" max="0" value="0" aria-label="选择历史姿态时间" disabled /></div>
+              <div id="timelineTicks" class="timeline-ticks" aria-label="可跳转时间戳"></div>
+              <div class="timeline-controls">
+                <div class="playback-controls"><button id="previousFrame" type="button" title="上一帧" aria-label="上一帧" disabled>‹</button><button id="playbackButton" type="button" title="播放或暂停历史姿态" aria-label="播放历史姿态" disabled>▶</button><button id="nextFrame" type="button" title="下一帧" aria-label="下一帧" disabled>›</button></div>
+                <select id="playbackSpeed" aria-label="回放速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+                <button id="liveButton" type="button" class="timeline-live-button">返回实时</button>
+                <span>已缓存 <strong id="historyCount">0</strong> 帧</span>
+              </div>
+            </div>
+          </section>
+        </article>
+
+        <aside class="imu-column" aria-label="三个 IMU 节点姿态">
+          <div class="imu-column-heading">
+            <div>
+              <p class="section-index">SENSOR NODES</p>
+              <h2>节点实时位姿</h2>
+            </div>
+            <span class="units">姿态角 / °</span>
+          </div>
+          <article class="imu-card" data-node="C0">
+            <header><div><span class="node-code node-c0">C0</span><strong>枕骨区节点</strong></div><span class="node-state">无数据</span></header>
+            <div class="imu-body">
+              <div class="imu-viewport">
+                <canvas id="imuCanvasC0" aria-label="C0 IMU 三维姿态"></canvas>
+                <div class="view-tools view-tools-small" data-view="C0" aria-label="C0 视图控制">
+                  <button type="button" data-action="zoom-in" title="放大视图" aria-label="放大 C0 视图">+</button>
+                  <button type="button" data-action="zoom-out" title="缩小视图" aria-label="缩小 C0 视图">−</button>
+                  <button type="button" data-action="reset" title="复位视角" aria-label="复位 C0 视角">↺</button>
+                </div>
+              </div>
+              <div class="angle-grid"><div><span>ROLL</span><strong data-field="roll">—</strong></div><div><span>PITCH</span><strong data-field="pitch">—</strong></div><div><span>YAW</span><strong data-field="yaw">—</strong></div></div>
+            </div>
+            <footer><span data-field="quaternion">q = [—]</span><span data-field="calibration">CAL —</span></footer>
+          </article>
+          <article class="imu-card" data-node="C4">
+            <header><div><span class="node-code node-c4">C4</span><strong>中颈区节点</strong></div><span class="node-state">无数据</span></header>
+            <div class="imu-body">
+              <div class="imu-viewport">
+                <canvas id="imuCanvasC4" aria-label="C4 IMU 三维姿态"></canvas>
+                <div class="view-tools view-tools-small" data-view="C4" aria-label="C4 视图控制">
+                  <button type="button" data-action="zoom-in" title="放大视图" aria-label="放大 C4 视图">+</button>
+                  <button type="button" data-action="zoom-out" title="缩小视图" aria-label="缩小 C4 视图">−</button>
+                  <button type="button" data-action="reset" title="复位视角" aria-label="复位 C4 视角">↺</button>
+                </div>
+              </div>
+              <div class="angle-grid"><div><span>ROLL</span><strong data-field="roll">—</strong></div><div><span>PITCH</span><strong data-field="pitch">—</strong></div><div><span>YAW</span><strong data-field="yaw">—</strong></div></div>
+            </div>
+            <footer><span data-field="quaternion">q = [—]</span><span data-field="calibration">CAL —</span></footer>
+          </article>
+          <article class="imu-card" data-node="C7">
+            <header><div><span class="node-code node-c7">C7</span><strong>颈胸交界节点</strong></div><span class="node-state">无数据</span></header>
+            <div class="imu-body">
+              <div class="imu-viewport">
+                <canvas id="imuCanvasC7" aria-label="C7 IMU 三维姿态"></canvas>
+                <div class="view-tools view-tools-small" data-view="C7" aria-label="C7 视图控制">
+                  <button type="button" data-action="zoom-in" title="放大视图" aria-label="放大 C7 视图">+</button>
+                  <button type="button" data-action="zoom-out" title="缩小视图" aria-label="缩小 C7 视图">−</button>
+                  <button type="button" data-action="reset" title="复位视角" aria-label="复位 C7 视角">↺</button>
+                </div>
+              </div>
+              <div class="angle-grid"><div><span>ROLL</span><strong data-field="roll">—</strong></div><div><span>PITCH</span><strong data-field="pitch">—</strong></div><div><span>YAW</span><strong data-field="yaw">—</strong></div></div>
+            </div>
+            <footer><span data-field="quaternion">q = [—]</span><span data-field="calibration">CAL —</span></footer>
+          </article>
+        </aside>
+      </div>
+      </section>
+
+      <section id="window-curves" class="workspace-window" role="tabpanel" aria-labelledby="tab-curves" hidden>
+        <article class="panel curves-panel">
+          <header class="panel-heading curves-heading">
+            <div><p class="section-index">KINEMATIC SIGNALS</p><h2>运动数据曲线</h2><p class="panel-description">三个节点，共用时间坐标；选中任意时刻，联动回看对应姿态。</p></div>
+            <div class="curve-selection"><span id="curveMode" class="live-badge">实时</span><div><span>选中设备时间</span><strong id="curveSelectedTime">—</strong></div></div>
+          </header>
+          <div class="curve-toolbar">
+            <div class="curve-modes" role="group" aria-label="曲线类型">
+              <button type="button" data-curve-mode="nodes" aria-pressed="true">IMU 数据</button>
+              <button type="button" data-curve-mode="relative" aria-pressed="false">相对角</button>
+            </div>
+            <div class="curve-filters">
+              <label id="signalControl">信号<select id="curveSignal"><option value="orientation">姿态角</option><option value="acceleration">加速度</option><option value="gyroscope">角速度</option></select></label>
+              <label>时间范围<select id="curveTimeWindow"><option value="10">近 10 秒</option><option value="30" selected>近 30 秒</option><option value="60">近 60 秒</option><option value="all">全部缓存</option></select></label>
+              <button id="resetCurveRange" class="text-button" type="button">复位范围</button>
+            </div>
+          </div>
+          <div class="curve-context"><div id="curveLegend" class="curve-legend" aria-label="显示曲线"></div><span id="curveReference">姿态角 / ° · 与模型使用相同中立位</span></div>
+          <div id="nodeCharts" class="node-charts" aria-label="三个 IMU 的数据曲线"></div>
+          <div id="relativeCharts" class="relative-charts" hidden></div>
+          <div class="curve-footer"><span id="curveHint">等待完整三节点数据；可先运行模拟数据。</span><span>滚轮缩放 · 拖动平移 · 点击选帧</span></div>
+          <div id="curveTimelineSlot" class="curve-timeline-slot"></div>
+        </article>
+        <p class="curve-footnote">相对角为两节点四元数的最短旋转角（0–180°），不表示单一方向的屈伸角。横轴为会话时间，设备时间保留在游标与回看栏。</p>
+      </section>
+
+      <section id="window-diagnostics" class="workspace-window" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
+      <section class="telemetry-panel">
+        <header>
+          <div><p class="section-index">ACQUISITION QUALITY</p><h2>采集质量与数据流</h2></div>
+          <span id="protocolBadge" class="protocol-badge">协议：自动识别 NDJSON / CSV</span>
+        </header>
+        <div class="telemetry-grid">
+          <div class="quality-item"><span>节点同步跨度</span><strong id="syncSpan">—</strong><small>同一完整帧内最大时间差</small></div>
+          <div class="quality-item"><span>解析错误</span><strong id="parseErrors">0</strong><small>无法识别或字段不完整的行</small></div>
+          <div class="quality-item"><span>串口字节</span><strong id="byteCount">0 B</strong><small>本次连接累计接收</small></div>
+          <div class="stream-log"><span>最近数据</span><code id="latestLine">尚未接收串口数据。</code></div>
+        </div>
+      </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="importmap">
+      {"imports":{"three":"./vendor/three.module.js"}}
+    </script>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
