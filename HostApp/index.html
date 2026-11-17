@@ -214,13 +214,24 @@
       <section class="telemetry-panel">
         <header>
           <div><p class="section-index">ACQUISITION QUALITY</p><h2>采集质量与数据流</h2></div>
-          <span id="protocolBadge" class="protocol-badge">协议：自动识别 NDJSON / CSV</span>
+          <span id="protocolBadge" class="protocol-badge">协议：自动识别二进制 / 文本</span>
         </header>
         <div class="telemetry-grid">
           <div class="quality-item"><span>节点同步跨度</span><strong id="syncSpan">—</strong><small>同一完整帧内最大时间差</small></div>
           <div class="quality-item"><span>解析错误</span><strong id="parseErrors">0</strong><small>无法识别或字段不完整的行</small></div>
           <div class="quality-item"><span>串口字节</span><strong id="byteCount">0 B</strong><small>本次连接累计接收</small></div>
           <div class="stream-log"><span>最近数据</span><code id="latestLine">尚未接收串口数据。</code></div>
+        </div>
+        <div class="device-commands" aria-label="设备控制">
+          <button class="text-button" type="button" data-device-command="1">开始上传</button>
+          <button class="text-button" type="button" data-device-command="2">停止上传</button>
+          <button class="text-button" type="button" data-device-command="4">重新初始化 IMU</button>
+          <label>采集周期 <select id="devicePeriod"><option value="20">20 ms / 50 Hz</option><option value="50">50 ms / 20 Hz</option><option value="100">100 ms / 10 Hz</option></select></label>
+          <button class="text-button" type="button" data-device-command="5">设置周期</button>
+          <button class="text-button" type="button" data-device-command="6">读取版本</button>
+          <button class="text-button" type="button" data-device-command="7">读取状态</button>
+          <button class="text-button" type="button" data-device-command="8">保存校准</button>
+          <p id="commandResult" role="status">设备控制需固件 v0.1.0.1；保存校准前先停止上传，且三节点需完成校准。</p>
         </div>
       </section>
       </section>

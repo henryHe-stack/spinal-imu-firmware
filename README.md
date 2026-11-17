@@ -4,7 +4,7 @@
 
 基于 STM32F103C8T6、FreeRTOS、TCA9548A 和 3 颗 BNO055 的后颈柔性 IMU 采集固件与浏览器监测上位机。项目用于颈部 C0、C4、C7 三个区域的姿态采集、数据传输、可视化与区域相对运动分析。
 
-> 当前状态：`v0.1.0.0` 固件框架基线。任务调度、模块边界和构建链已经建立；BNO055 完整配置、UART DMA 协议、微秒时间戳和颈部姿态算法仍是明确标注的占位接口，尚未经过实物板验证。
+> 当前状态：`v0.1.0.1` 驱动实现版。已补齐 BNO055、双串口 DMA、CRC 协议、TIM2 微秒时基、校准保存及任务诊断。通过 ARM 编译与主机模拟测试；MCU 颈部运动算法仍为占位，尚未烧录实物验证。
 
 上位机已实现姿态重建、数据曲线、采集诊断三个工作窗口及共享历史回放，已通过单元测试与模拟串口浏览器测试；尚未完成 STM32 实物串口联调。
 
@@ -15,10 +15,12 @@
 | MCU | STM32F103C8T6，HSE 8 MHz，SYSCLK 72 MHz | STM32 HAL + FreeRTOS |
 | IMU | 3 × BNO055，对应 C0、C4、C7 安装区域 | I2C，默认 7 位地址 `0x28` |
 | I2C 扩展 | TCA9548A | I2C1，默认 7 位地址 `0x70`，通道 0/1/2 |
-| 无线/串口 | HC-05 或兼容 UART 模块 | USART2，115200 8N1 |
+| PC 串口 | 外部 3.3 V TTL USB-UART 转接器 | USART1 PA9/PA10，115200 8N1，RX/TX DMA |
+| 无线串口 | HC-05 经典蓝牙透传 | USART2 PA2/PA3，115200 8N1，RX/TX DMA；PA4 STATE |
 | 调试 | SWD | PA13 / PA14 |
-| 时间基准 | TIM2，目标 1 MHz 自由运行计数器 | 当前暂时退化为 1 ms RTOS tick |
-| 采集节拍 | 目标 50 Hz | 当前由 FreeRTOS 20 ms 软件延时驱动 |
+| 时间基准 | TIM2，1 MHz 自由运行计数器 | 16 位中断扩展至 uint32 μs |
+| 采集节拍 | 默认 20 ms 轮询，目标 50 Hz | vTaskDelayUntil，20–1000 ms 可配置，真实时序待测 |
+| 校准存储 | Flash 末尾双 1 KB 页 | 应用 Flash 限为 62 KB，显式保存/重启恢复 |
 
 ## 架构
 
@@ -43,7 +45,7 @@ CubeMX / HAL / CMSIS / FreeRTOS
 | `AcquisitionTask` | 4 | 唯一拥有 I2C1、TCA9548A 和 3 颗 BNO055，固定按 C0 -> C4 -> C7 轮询 |
 | `CommunicationTask` | 3 | 从采集队列取帧、协议编码、UART 发送 |
 | `CommandTask` | 2 | 消费 UART RX 数据、解析命令、向采集任务投递控制请求 |
-| `HealthTask` | 1 | 任务心跳、错误计数、队列/栈水位和后续看门狗策略 |
+| `HealthTask` | 1 | 任务心跳、错误计数、栈水位、LED/蓝牙状态及可选看门狗 |
 
 I2C 复用器的“选择通道 + 访问传感器”必须保持为同一任务内的完整操作。其他任务不得直接调用 BNO055、TCA9548A 或 I2C BSP。
 
@@ -84,12 +86,12 @@ cmake --build --preset Debug
 
 输出文件：`build/Debug/Spinal_tester.elf`。
 
-首次发布基线的编译结果：
+当前驱动版本 Debug 编译结果（GNU Arm 14.3.1）：
 
 | 存储区 | 使用量 | 占比 |
 |---|---:|---:|
-| RAM | 10,824 B / 20 KB | 52.85% |
-| Flash | 29,956 B / 64 KB | 45.71% |
+| RAM | 14,560 B / 20 KB | 71.09% |
+| Flash | 42,672 B / 62 KB | 67.21% |
 
 这些数字只代表当前 Debug 构建，不代表最终功能版本或运行期栈余量已经验证。
 
@@ -110,27 +112,23 @@ npm ci
 npm start
 ```
 
-打开 <http://127.0.0.1:4173>，点击“运行模拟数据”即可预览。串口连接使用 Web Serial，数据也可导出为 CSV。当前固件线上协议尚未冻结，因此上位机暂以 NDJSON/CSV 文本帧联调；加速度、角速度保留传输原始值，单位由固件协议约定。格式、测试命令和重建边界见 [HostApp/README.md](HostApp/README.md)。
+打开 <http://127.0.0.1:4173>，点击“运行模拟数据”即可预览。串口连接使用 Web Serial，可导出 CSV。固件使用 v1 二进制采样/命令/应答帧和 CRC16，上位机自动识别并兼容旧 NDJSON/CSV。二进制加速度换算为 m/s²、角速度为 °/s；旧文本保留传输值。设备控制位于采集诊断窗口。格式、测试命令和重建边界见 [HostApp/README.md](HostApp/README.md)。
 
 ## CubeMX 再生成规则
 
 1. 使用 `Spinal_tester.ioc` 修改时钟、引脚、DMA 和中间件配置。
 2. 业务代码只放在独立分层目录，不写入 `Drivers/` 或 `Middlewares/`。
 3. `Core/` 中只修改 `USER CODE` 区。
-4. 重新生成后必须检查 `main.c`、`freertos.c`、根 `CMakeLists.txt` 和中断优先级。
+4. 重新生成后检查 `main.c`、`freertos.c`、根 `CMakeLists.txt`、FreeRTOS 宏、中断优先级和链接脚本 **62 KB Flash 保留边界**。
 5. 重新执行 Debug 构建，并在 PR 中粘贴 RAM/Flash 占用结果。
 
-## 当前占位接口
+## 驱动交接与验证
 
-- `Bno055_Configure()`：复位、工作模式、轴映射、单位、校准参数与回读验证。
-- `Bno055_ReadSample()`：四元数、加速度、角速度、温度和校准状态的突发读取。
-- `BspUart_ReadAvailable()`：USART2 circular DMA 环形缓冲。
-- `ProtocolService_*()`：版本化二进制帧、字节序、CRC、粘包/拆包恢复。
-- `BspTime_NowUs()`：TIM2 1 MHz 计数和 16 位溢出扩展。
-- `NeckMotionAlgorithm_*()`：中立位、时间对齐和 C0-C4/C4-C7/C0-C7 区域相对姿态。
-- `HealthTask_Entry()`：栈/队列水位和独立看门狗投喂条件。
+- [驱动与实物联调](Docs/DRIVER_BRINGUP.md)：接线、状态机、任务所有权、Flash 布局及台架验收顺序。
+- [线上协议 v1](Docs/WIRE_PROTOCOL.md)：字段、单位、CRC、命令、状态码与固定向量。
+- [测试命令和边界](Docs/TESTING.md)：ARM 构建、实际 C 驱动 mock HAL、19 项 JS 单元及 12 项浏览器测试。
 
-搜索 `TODO(owner)` 可以定位尚未实现的责任点。
+MCU `NeckMotionAlgorithm_*()` 与 CAPTURE_NEUTRAL 命令保持 `NOT_IMPLEMENTED`。网页中立位只是显示参考，不代表 MCU 算法完成。IWDG 已提供策略，默认关闭；完整健康快照目前通过调试接口查看，并未定期发送到网页。
 
 ## 协作流程
 

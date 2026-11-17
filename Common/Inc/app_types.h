@@ -52,6 +52,8 @@ typedef struct
     AppVector3Raw gyroscope;
     int8_t temperature_c;
     uint8_t calibration_status;
+    uint8_t system_status;
+    uint8_t system_error;
     uint8_t node_id;
     uint8_t tca_channel;
     uint16_t flags;
@@ -72,14 +74,29 @@ typedef enum
     APP_COMMAND_STOP_STREAM,
     APP_COMMAND_CAPTURE_NEUTRAL,
     APP_COMMAND_REINITIALIZE_SENSORS,
-    APP_COMMAND_SET_SAMPLE_PERIOD_MS
+    APP_COMMAND_SET_SAMPLE_PERIOD_MS,
+    APP_COMMAND_GET_INFO,
+    APP_COMMAND_GET_STATUS,
+    APP_COMMAND_SAVE_CALIBRATION
 } AppCommandId;
+
+typedef enum { APP_PORT_PC = 0, APP_PORT_BT = 1, APP_PORT_COUNT = 2 } AppPortId;
 
 typedef struct
 {
     AppCommandId id;
     uint32_t request_id;
     uint32_t value;
+    AppPortId source;
 } AppControlCommand;
+
+typedef struct
+{
+    uint32_t request_id;
+    uint32_t value;
+    uint8_t command;
+    uint8_t status; /* AppStatus numeric value; frozen in Docs/WIRE_PROTOCOL.md. */
+    AppPortId destination;
+} AppCommandReply;
 
 #endif /* APP_TYPES_H */

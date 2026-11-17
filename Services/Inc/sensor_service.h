@@ -19,6 +19,7 @@ typedef struct
     BspTime *timebase;
     uint32_t next_sequence;
     bool initialized;
+    uint32_t next_recovery_ms;
 } SensorService;
 
 /* All functions in this module must be called by AcquisitionTask only. */

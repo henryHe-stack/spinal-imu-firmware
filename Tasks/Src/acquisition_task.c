@@ -1,82 +1,55 @@
 #include "app_tasks.h"
-
-#include <stdbool.h>
-
 #include "app_config.h"
 #include "diagnostics_service.h"
 #include "task.h"
 
 void AcquisitionTask_Entry(void *argument)
 {
-    AppTaskContext *context = (AppTaskContext *)argument;
-    AppSampleFrame frame;
-    AppControlCommand command;
-    bool streaming_enabled = true;
-    uint32_t reinitialize_countdown = 0U;
-    AppStatus sensor_status;
-
-    configASSERT(context != NULL);
-    configASSERT(context->sensor_service != NULL);
-    configASSERT(context->i2c != NULL);
-    configASSERT(context->timebase != NULL);
-    configASSERT(context->sample_queue != NULL);
-    configASSERT(context->command_queue != NULL);
-
-    /* Sensor discovery and every later I2C transaction stay in this task. */
-    sensor_status = SensorService_Init(context->sensor_service,
-                                       context->i2c,
-                                       context->timebase);
-
+    AppTaskContext *context=argument;
+    AppSampleFrame frame; AppControlCommand command;
+    bool streaming=true; uint32_t period_ms=APP_ACQUISITION_PERIOD_MS;
+    configASSERT(context && context->sensor_service && context->reply_queue);
+    (void)SensorService_Init(context->sensor_service,context->i2c,context->timebase);
+    TickType_t wake=xTaskGetTickCount();
     for (;;)
     {
-        /* This task is the sole owner of I2C1, TCA9548A and all BNO055 nodes. */
-        while (xQueueReceive(context->command_queue, &command, 0U) == pdPASS)
+        /* Bound command work: a continuously active UART must not starve
+         * sensor acquisition. Overflow is reported by CommandTask. */
+        for (unsigned budget=0; budget<APP_COMMAND_QUEUE_LENGTH &&
+             xQueueReceive(context->command_queue,&command,0)==pdPASS; ++budget)
         {
-            if (command.id == APP_COMMAND_START_STREAM)
+            AppStatus status=APP_STATUS_OK; uint32_t value=command.value;
+            switch(command.id)
             {
-                streaming_enabled = true;
+                case APP_COMMAND_START_STREAM: streaming=true; break;
+                case APP_COMMAND_STOP_STREAM: streaming=false; break;
+                case APP_COMMAND_SET_SAMPLE_PERIOD_MS:
+                    /* 50Hz max until real I2C cycle timing is measured. */
+                    if (value<20 || value>1000) status=APP_STATUS_INVALID_ARGUMENT;
+                    else { period_ms=value; wake=xTaskGetTickCount(); }
+                    break;
+                case APP_COMMAND_GET_INFO: value=0x00010001UL; break; /* firmware 0.1.0.1 */
+                case APP_COMMAND_GET_STATUS:
+                    value=streaming ? 0x100U : 0U;
+                    for (unsigned i=0;i<3;++i) if(context->sensor_service->sensors[i].configured) value|=1U<<i;
+                    break;
+                case APP_COMMAND_SAVE_CALIBRATION:
+                    status=streaming ? APP_STATUS_BUSY : SensorService_ExecuteCommand(context->sensor_service,&command);
+                    wake=xTaskGetTickCount(); break;
+                default: status=SensorService_ExecuteCommand(context->sensor_service,&command); break;
             }
-            else if (command.id == APP_COMMAND_STOP_STREAM)
-            {
-                streaming_enabled = false;
-            }
-            else
-            {
-                (void)SensorService_ExecuteCommand(context->sensor_service, &command);
-            }
+            AppCommandReply reply={.request_id=command.request_id,.value=value,.command=(uint8_t)command.id,
+                .status=(uint8_t)status,.destination=command.source};
+            if (xQueueSend(context->reply_queue,&reply,0)!=pdPASS) DiagnosticsService_Increment(APP_DIAG_REPLY_DROP);
         }
-
-        if (streaming_enabled)
-        {
-            if (sensor_status != APP_STATUS_OK)
-            {
-                /* Retry approximately once per second without blocking other tasks. */
-                if (reinitialize_countdown == 0U)
-                {
-                    sensor_status = SensorService_Init(context->sensor_service,
-                                                       context->i2c,
-                                                       context->timebase);
-                    reinitialize_countdown = 1000U / APP_ACQUISITION_PERIOD_MS;
-                }
-                else
-                {
-                    reinitialize_countdown--;
-                }
-            }
-
-            if (SensorService_ReadCycle(context->sensor_service, &frame) != APP_STATUS_OK)
-            {
-                DiagnosticsService_Increment(APP_DIAG_SENSOR_READ_ERROR);
-            }
-
-            /* Bounded policy: keep acquisition periodic and drop the newest frame. */
-            if (xQueueSend(context->sample_queue, &frame, 0U) != pdPASS)
-            {
-                DiagnosticsService_Increment(APP_DIAG_SAMPLE_QUEUE_DROP);
-            }
-        }
-
+        if (SensorService_ReadCycle(context->sensor_service,&frame)!=APP_STATUS_OK)
+            DiagnosticsService_Increment(APP_DIAG_SENSOR_READ_ERROR);
+        if (streaming && xQueueSend(context->sample_queue,&frame,0)!=pdPASS)
+            DiagnosticsService_Increment(APP_DIAG_SAMPLE_QUEUE_DROP);
         DiagnosticsService_Heartbeat(APP_HEARTBEAT_ACQUISITION);
-        vTaskDelay(pdMS_TO_TICKS(APP_ACQUISITION_PERIOD_MS));
+        TickType_t period=pdMS_TO_TICKS(period_ms), now=xTaskGetTickCount();
+        if ((TickType_t)(now-wake)>=period)
+        { DiagnosticsService_Increment(APP_DIAG_ACQUISITION_OVERRUN); wake=now; }
+        vTaskDelayUntil(&wake,period);
     }
 }

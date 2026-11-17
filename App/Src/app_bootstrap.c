@@ -14,7 +14,7 @@
 #include "sensor_service.h"
 
 static BspI2c g_i2c;
-static BspUart g_uart;
+static BspUart g_ports[APP_PORT_COUNT];
 static BspTime g_timebase;
 static SensorService g_sensor_service;
 static AppTaskContext g_task_context;
@@ -23,6 +23,8 @@ static StaticQueue_t g_sample_queue_control;
 static uint8_t g_sample_queue_storage[APP_SAMPLE_QUEUE_LENGTH * sizeof(AppSampleFrame)];
 static StaticQueue_t g_command_queue_control;
 static uint8_t g_command_queue_storage[APP_COMMAND_QUEUE_LENGTH * sizeof(AppControlCommand)];
+static StaticQueue_t g_reply_queue_control;
+static uint8_t g_reply_queue_storage[APP_REPLY_QUEUE_LENGTH * sizeof(AppCommandReply)];
 
 static StaticTask_t g_acquisition_task_control;
 static StackType_t g_acquisition_stack[APP_ACQUISITION_STACK_WORDS];
@@ -39,37 +41,37 @@ static bool AppBootstrap_CreateTasks(void)
 
     vTaskSuspendAll();
 
-    success = success && (xTaskCreateStatic(AcquisitionTask_Entry,
+    success = success && ((g_task_context.task_handles[0] = xTaskCreateStatic(AcquisitionTask_Entry,
                                             "acquisition",
                                             APP_ACQUISITION_STACK_WORDS,
                                             &g_task_context,
                                             APP_ACQUISITION_TASK_PRIORITY,
                                             g_acquisition_stack,
-                                            &g_acquisition_task_control) != NULL);
+                                            &g_acquisition_task_control)) != NULL);
 
-    success = success && (xTaskCreateStatic(CommunicationTask_Entry,
+    success = success && ((g_task_context.task_handles[1] = xTaskCreateStatic(CommunicationTask_Entry,
                                             "communication",
                                             APP_COMMUNICATION_STACK_WORDS,
                                             &g_task_context,
                                             APP_COMMUNICATION_TASK_PRIORITY,
                                             g_communication_stack,
-                                            &g_communication_task_control) != NULL);
+                                            &g_communication_task_control)) != NULL);
 
-    success = success && (xTaskCreateStatic(CommandTask_Entry,
+    success = success && ((g_task_context.task_handles[2] = xTaskCreateStatic(CommandTask_Entry,
                                             "command",
                                             APP_COMMAND_STACK_WORDS,
                                             &g_task_context,
                                             APP_COMMAND_TASK_PRIORITY,
                                             g_command_stack,
-                                            &g_command_task_control) != NULL);
+                                            &g_command_task_control)) != NULL);
 
-    success = success && (xTaskCreateStatic(HealthTask_Entry,
+    success = success && ((g_task_context.task_handles[3] = xTaskCreateStatic(HealthTask_Entry,
                                             "health",
                                             APP_HEALTH_STACK_WORDS,
                                             &g_task_context,
                                             APP_HEALTH_TASK_PRIORITY,
                                             g_health_stack,
-                                            &g_health_task_control) != NULL);
+                                            &g_health_task_control)) != NULL);
 
     (void)xTaskResumeAll();
     return success;
@@ -79,7 +81,7 @@ AppStatus AppBootstrap_Start(const AppBootstrapConfig *config)
 {
     AppStatus status;
 
-    if ((config == NULL) || (config->i2c == NULL) || (config->uart == NULL))
+    if (!config || !config->i2c || !config->uart_pc || !config->uart_bt)
     {
         return APP_STATUS_INVALID_ARGUMENT;
     }
@@ -89,11 +91,13 @@ AppStatus AppBootstrap_Start(const AppBootstrapConfig *config)
     {
         return status;
     }
-    status = BspUart_Init(&g_uart, config->uart);
+    status = BspUart_Init(&g_ports[APP_PORT_PC], config->uart_pc);
     if (status != APP_STATUS_OK)
     {
         return status;
     }
+    status = BspUart_Init(&g_ports[APP_PORT_BT], config->uart_bt);
+    if (status != APP_STATUS_OK) return status;
     status = BspTime_Init(&g_timebase, config->timestamp_timer);
     if (status != APP_STATUS_OK)
     {
@@ -113,9 +117,11 @@ AppStatus AppBootstrap_Start(const AppBootstrapConfig *config)
     g_task_context.sensor_service = &g_sensor_service;
     g_task_context.i2c = &g_i2c;
     g_task_context.timebase = &g_timebase;
-    g_task_context.uart = &g_uart;
+    for (unsigned i = 0; i < APP_PORT_COUNT; ++i) g_task_context.ports[i] = &g_ports[i];
+    g_task_context.reply_queue = xQueueCreateStatic(APP_REPLY_QUEUE_LENGTH, sizeof(AppCommandReply),
+        g_reply_queue_storage, &g_reply_queue_control);
 
-    if ((g_task_context.sample_queue == NULL) || (g_task_context.command_queue == NULL))
+    if (!g_task_context.sample_queue || !g_task_context.command_queue || !g_task_context.reply_queue)
     {
         return APP_STATUS_INTERNAL_ERROR;
     }

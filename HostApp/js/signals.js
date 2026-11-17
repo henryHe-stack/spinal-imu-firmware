@@ -1,6 +1,6 @@
 // Shared signal definitions: charts and numeric readouts must use the same
-// quaternion convention. Raw acceleration/gyro units are not yet frozen in
-// the wire protocol, so the UI deliberately labels them as transmitted values.
+// quaternion convention. Binary v1 vectors use m/s² and °/s; legacy text
+// vectors retain the transmitted units and are labelled separately.
 import { applyNeutral, quaternionAngleDegrees, quaternionToEulerDegrees, relativeQuaternion } from "./math.js";
 import { NODE_IDS } from "./protocol.js";
 
@@ -15,6 +15,13 @@ export const SIGNALS = {
   acceleration: { label: "加速度", unit: "原始值", axes: ["X", "Y", "Z"], note: "加速度 / 传输原始值 · 单位以固件输出约定为准" },
   gyroscope: { label: "角速度", unit: "原始值", axes: ["X", "Y", "Z"], note: "角速度 / 传输原始值 · 单位以固件输出约定为准" },
 };
+
+export function signalMetadata(signal, snapshot) {
+  const base = SIGNALS[signal];
+  if (signal === "orientation" || snapshot?.vectorUnits !== "SI") return base;
+  const unit = signal === "acceleration" ? "m/s²" : "°/s";
+  return { ...base, unit, note: `${base.label} / ${unit} · 固件 BNO055 单位换算` };
+}
 
 export function frameSignals(snapshot, neutral = {}) {
   const nodes = {}, quaternions = {};
