@@ -159,6 +159,10 @@ h3 { font-size: 13px; font-weight: 600; }
 .stream-log code { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 8px 10px; margin-top: 8px; border-radius: 4px; font-size: 9px; color: #8d9eb3; background: #f5f8fc; }
 .toast { position: fixed; bottom: 24px; right: 24px; z-index: 50; max-width: min(380px, calc(100% - 40px)); background: #243a56; color: #fff; border-radius: 8px; box-shadow: 0 8px 24px #20364d24; padding: 12px 16px; font-size: 12px; opacity: 0; transform: translateY(8px); transition: .18s; pointer-events: none; }
 .toast.visible { opacity: 1; transform: none; }
+.device-commands { padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-top: 1px solid var(--line); }
+.device-commands label { font-size: 11px; color: #7b8ca2; }
+.device-commands select { border: 1px solid var(--line); padding: 6px; background: white; border-radius: 4px; font-size: 11px; }
+.device-commands p { flex-basis: 100%; font-size: 11px; line-height: 1.8; color: #8392a6; }
 .panel-description { font-size: 11px; line-height: 1.7; color: #8b9bb0; margin-top: 6px; }
 .curves-heading { padding-top: 21px; padding-bottom: 20px; }
 .curve-selection { display: flex; align-items: center; gap: 12px; white-space: nowrap; }

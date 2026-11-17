@@ -1,12 +1,16 @@
+import { TelemetryFramer, encodeCommand } from "./wire.js";
+
 export class SerialSource {
-  constructor({ onLine, onBytes, onState, onError }) {
+  constructor({ onLine, onFrame, onReply, onProtocolError, onBytes, onState, onError }) {
     this.onLine = onLine;
     this.onBytes = onBytes;
     this.onState = onState;
     this.onError = onError;
     this.port = null;
+    this.onFrame = onFrame; this.onReply = onReply; this.onProtocolError = onProtocolError;
     this.reader = null;
     this.keepReading = false;
+    this.writePending = Promise.resolve();
   }
 
   static supported() {
@@ -19,48 +23,54 @@ export class SerialSource {
     await this.port.open({ baudRate, dataBits: 8, stopBits: 1, parity: "none", flowControl: "none" });
     this.keepReading = true;
     this.onState("connected");
-    this.readLoop();
+    this.reading = this.readLoop();
   }
 
   async disconnect() {
     this.keepReading = false;
-    if (this.reader) {
-      await this.reader.cancel().catch(() => {});
-      this.reader.releaseLock();
-      this.reader = null;
-    }
-    if (this.port) {
-      await this.port.close().catch(() => {});
-      this.port = null;
-    }
-    this.onState("disconnected");
+    await this.reader?.cancel().catch(() => {});
+    await this.reading; // readLoop alone owns reader release and port close.
   }
 
   async readLoop() {
-    const decoder = new TextDecoder();
-    let buffer = "";
+    const framer = new TelemetryFramer({ onLine: this.onLine, onFrame: this.onFrame,
+      onReply: this.onReply, onError: this.onProtocolError });
     try {
       while (this.port?.readable && this.keepReading) {
-        this.reader = this.port.readable.getReader();
+        const reader = this.port.readable.getReader();
+        this.reader = reader;
         try {
           while (this.keepReading) {
-            const { value, done } = await this.reader.read();
-            if (done) break;
-            this.onBytes(value.byteLength);
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split(/\r?\n/);
-            buffer = lines.pop() ?? "";
-            for (const line of lines) this.onLine(line);
+            const { value, done } = await reader.read();
+            if (done) { this.keepReading = false; break; }
+            this.onBytes?.(value.byteLength);
+            framer.push(value);
           }
         } finally {
-          this.reader.releaseLock();
+          reader.releaseLock();
           this.reader = null;
         }
       }
     } catch (error) {
       if (this.keepReading) this.onError(error);
     } finally {
-      if (this.keepReading) await this.disconnect();
+      this.keepReading = false;
+      await this.writePending.catch(() => {});
+      const port = this.port; this.port = null;
+      await port?.close().catch(() => {});
+      this.onState("disconnected");
     }
+  }
+
+  sendCommand(id, requestId, value = 0) {
+    // Serialize quick clicks across different buttons: Web Serial allows one
+    // writer lock, and each binary command must remain contiguous.
+    this.writePending = this.writePending.catch(() => {}).then(async () => {
+      if (!this.keepReading || !this.port?.writable) throw new Error("串口未连接或不可写");
+      const writer = this.port.writable.getWriter();
+      try { await writer.write(encodeCommand(id, requestId, value)); }
+      finally { writer.releaseLock(); }
+    });
+    return this.writePending;
   }
 }

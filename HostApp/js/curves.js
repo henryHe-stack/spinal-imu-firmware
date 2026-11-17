@@ -1,4 +1,4 @@
-import { AXIS_COLORS, PAIRS, SIGNALS, envelopePoints, frameSignals, nearestFrameIndex } from "./signals.js";
+import { AXIS_COLORS, PAIRS, SIGNALS, signalMetadata, envelopePoints, frameSignals, nearestFrameIndex } from "./signals.js";
 import { NODE_IDS } from "./protocol.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -169,7 +169,7 @@ export class SignalCurves {
     this.hoverIndex = this.indexAt(event, card);
     const snapshot = this.timeline.history[this.hoverIndex];
     if (!snapshot) return;
-    const signals = this.valuesFor(snapshot, card.key), unit = this.mode === "relative" ? "°" : SIGNALS[this.signal].unit;
+    const signals = this.valuesFor(snapshot, card.key), unit = this.mode === "relative" ? "°" : signalMetadata(this.signal, snapshot).unit;
     card.tooltip.replaceChildren();
     const time = document.createElement("strong"); time.textContent = `设备 ${timeLabel(snapshot.timestampUs / 1_000_000)}`; card.tooltip.append(time);
     this.descriptors().forEach(({ label, color }, index) => {
@@ -192,14 +192,14 @@ export class SignalCurves {
     const mode = this.timeline.live ? "实时" : this.timeline.playing ? "回放" : "历史";
     $("#curveMode").textContent = mode; $("#curveMode").classList.toggle("history", !this.timeline.live);
     $("#curveSelectedTime").textContent = selected ? timeLabel(selected.timestampUs / 1_000_000) : "—";
-    $("#curveReference").textContent = this.mode === "relative" ? "最短相对旋转角 / ° · 与模型使用相同中立位" : SIGNALS[this.signal].note;
+    $("#curveReference").textContent = this.mode === "relative" ? "最短相对旋转角 / ° · 与模型使用相同中立位" : signalMetadata(this.signal, selected).note;
     const domain = this.domain();
     const first = Math.max(0, nearestFrameIndex(history, domain[0]) - 1), last = Math.min(history.length - 1, nearestFrameIndex(history, domain[1]) + 1);
     const frames = history.slice(first, last + 1);
     $("#curveHint").textContent = history.length ? `会话 ${domain[0].toFixed(2)}–${domain[1].toFixed(2)} s · 缓存 ${history.length.toLocaleString()} 帧${this.customDomain ? " · 手动范围" : ""}` : "等待完整三节点数据；可先运行模拟数据。";
     for (const card of this.cards) {
       if ((card.key === "relative") !== (this.mode === "relative")) continue;
-      const unit = this.mode === "relative" ? "°" : SIGNALS[this.signal].unit;
+      const unit = this.mode === "relative" ? "°" : signalMetadata(this.signal, selected).unit;
       card.unit.textContent = unit;
       const values = selected ? this.valuesFor(selected, card.key) : [null, null, null];
       card.values.forEach((item, index) => {
@@ -218,7 +218,9 @@ export class SignalCurves {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); ctx.scale(dpr, dpr);
     const { left, right, top, bottom } = MARGIN, plotWidth = width - left - right, plotHeight = height - top - bottom;
     const x = (time) => left + (time - domain[0]) / (domain[1] - domain[0]) * plotWidth;
-    const series = descriptors.map((_, index) => frames.map((frame) => ({ time: frame.sessionSeconds, value: this.valuesFor(frame, card.key)[index], gap: frame.clockReset })));
+    const series = descriptors.map((_, index) => frames.map((frame) => ({ time: frame.sessionSeconds,
+      value: frame.vectorUnits !== selected?.vectorUnits && this.signal !== "orientation" && this.mode !== "relative" ? null : this.valuesFor(frame, card.key)[index],
+      gap: frame.clockReset || frame.dataGap })));
     let min = 0, max = 0, hasValues = false;
     series.forEach((points, index) => {
       if (!this.visible[index]) return;

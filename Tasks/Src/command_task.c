@@ -1,50 +1,41 @@
 #include "app_tasks.h"
-
 #include "diagnostics_service.h"
 #include "protocol_service.h"
 #include "task.h"
 
-#define COMMAND_RX_CHUNK_SIZE (64U)
-#define COMMAND_POLL_PERIOD_MS (10U)
-
 void CommandTask_Entry(void *argument)
 {
-    AppTaskContext *context = (AppTaskContext *)argument;
-    uint8_t rx_data[COMMAND_RX_CHUNK_SIZE];
-    size_t rx_length;
-    size_t consumed;
-    AppControlCommand command;
-    AppStatus status;
-
-    configASSERT(context != NULL);
-    configASSERT(context->uart != NULL);
-    configASSERT(context->command_queue != NULL);
-
+    AppTaskContext *context=argument;
+    static ProtocolParser parsers[APP_PORT_COUNT];
+    uint32_t previous_overflows[APP_PORT_COUNT]={0}, previous_errors[APP_PORT_COUNT]={0};
+    uint8_t chunk[64]; AppControlCommand command;
+    configASSERT(context && context->command_queue);
     for (;;)
     {
-        rx_length = BspUart_ReadAvailable(context->uart, rx_data, sizeof(rx_data));
-        if (rx_length > 0U)
+        for (unsigned port=0;port<APP_PORT_COUNT;++port)
         {
-            status = ProtocolService_ParseCommand(rx_data,
-                                                  rx_length,
-                                                  &command,
-                                                  &consumed);
-            (void)consumed;
-
-            if (status == APP_STATUS_OK)
+            BspUart *uart=context->ports[port]; BspUart_Service(uart);
+            if (uart->rx_overflows!=previous_overflows[port] || uart->errors!=previous_errors[port])
             {
-                if (xQueueSend(context->command_queue, &command, 0U) != pdPASS)
+                parsers[port].length=0;
+                previous_overflows[port]=uart->rx_overflows; previous_errors[port]=uart->errors;
+            }
+            /* Bound work per turn so one noisy port cannot starve its peer. */
+            size_t length=BspUart_ReadAvailable(uart,chunk,sizeof(chunk));
+            uint32_t errors=parsers[port].errors;
+            for (size_t i=0;i<length;++i) if (ProtocolService_FeedCommand(&parsers[port],chunk[i],&command))
+            {
+                command.source=(AppPortId)port;
+                if (xQueueSend(context->command_queue,&command,0)!=pdPASS)
                 {
-                    DiagnosticsService_Increment(APP_DIAG_COMMAND_PARSE_ERROR);
+                    AppCommandReply reply={.request_id=command.request_id,.command=command.id,
+                        .status=APP_STATUS_QUEUE_FULL,.destination=(AppPortId)port};
+                    if(xQueueSend(context->reply_queue,&reply,0)!=pdPASS) DiagnosticsService_Increment(APP_DIAG_REPLY_DROP);
                 }
             }
-            else if (status != APP_STATUS_NOT_IMPLEMENTED)
-            {
-                DiagnosticsService_Increment(APP_DIAG_COMMAND_PARSE_ERROR);
-            }
+            if (errors!=parsers[port].errors) DiagnosticsService_Increment(APP_DIAG_COMMAND_PARSE_ERROR);
         }
-
         DiagnosticsService_Heartbeat(APP_HEARTBEAT_COMMAND);
-        vTaskDelay(pdMS_TO_TICKS(COMMAND_POLL_PERIOD_MS));
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
