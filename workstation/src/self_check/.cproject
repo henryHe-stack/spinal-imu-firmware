@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?fileVersion 4.0.0?>
+<cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+  <storageModule moduleId="org.eclipse.cdt.core.settings">
+    <cconfiguration id="selfcheck.debug.1038">
+      <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="selfcheck.debug.1038" moduleId="org.eclipse.cdt.core.settings" name="Debug">
+        <externalSettings/>
+        <extensions>
+          <extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+          <extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+          <extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+          <extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+        </extensions>
+      </storageModule>
+      <storageModule moduleId="cdtBuildSystem" version="4.0.0">
+        <configuration artifactExtension="elf" artifactName="TimingDiag_Three" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" id="selfcheck.debug.1038" name="Debug" parent="com.st.stm32cube.ide.mcu.gnu.managedbuild.config.exe.debug">
+          <folderInfo id="selfcheck.debug.folder" name="/" resourcePath="">
+            <toolChain id="selfcheck.toolchain" name="MCU ARM GCC" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.toolchain.exe.debug">
+              <option id="selfcheck.mcu" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.target_mcu" value="STM32F103C8Tx" valueType="string"/>
+              <option id="selfcheck.cpuid" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.target_cpuid" value="0" valueType="string"/>
+              <option id="selfcheck.coreid" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.target_coreid" value="0" valueType="string"/>
+              <option id="selfcheck.clock" superClass="com.st.stm32cube.ide.mcu.debug.option.cpuclock" value="8" valueType="string"/>
+              <option id="selfcheck.fpu" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.fpu" value="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.fpu.value.none" valueType="enumerated"/>
+              <option id="selfcheck.float" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.floatabi" value="com.st.stm32cube.ide.mcu.gnu.managedbuild.option.floatabi.value.soft" valueType="enumerated"/>
+              <targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="selfcheck.platform" isAbstract="false" osList="all" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.targetplatform"/>
+              <builder arguments="-NoProfile -ExecutionPolicy Bypass -File build.ps1 -Mode three -Target" autoBuildTarget="all" buildPath="${workspace_loc:/ImuSelfCheck_F103C8}" cleanBuildTarget="clean" command="powershell.exe" enableCleanBuild="true" id="selfcheck.builder" incrementalBuildTarget="all" managedBuildOn="false" name="Self-check PowerShell build" parallelBuildOn="false" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.builder"/>
+              <tool id="selfcheck.compiler" name="MCU GCC Compiler" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler">
+                <option id="selfcheck.includes" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths" useByScannerDiscovery="false" valueType="includePath">
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/firmware"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/src"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/platform"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/sensor"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/Drivers/STM32F1xx_HAL_Driver/Inc"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/Drivers/CMSIS/Include"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/Drivers/CMSIS/Device/ST/STM32F1xx/Include"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/Middlewares/Third_Party/FreeRTOS/Source/include"/>
+                  <listOptionValue builtIn="false" value="${ProjDirPath}/vendor/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM3"/>
+                </option>
+                <option id="selfcheck.defines" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.definedsymbols" useByScannerDiscovery="false" valueType="definedSymbols">
+                  <listOptionValue builtIn="false" value="USE_HAL_DRIVER"/>
+                  <listOptionValue builtIn="false" value="STM32F103xB"/>
+                  <listOptionValue builtIn="false" value="DIAG_NODE_MASK=7"/>
+                </option>
+                <inputType id="selfcheck.input" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.input.c"/>
+              </tool>
+              <tool id="selfcheck.linker" name="MCU GCC Linker" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker"><inputType id="selfcheck.linkinput" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.input"/></tool>
+            </toolChain>
+          </folderInfo>
+          <sourceEntries><entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="firmware"/><entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/></sourceEntries>
+        </configuration>
+      </storageModule>
+      <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+    </cconfiguration>
+  </storageModule>
+  <storageModule moduleId="cdtBuildSystem" version="4.0.0"><project id="ImuSelfCheck_F103C8.selfcheck" name="ImuSelfCheck_F103C8"/></storageModule>
+  <storageModule moduleId="scannerConfiguration"><autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/></storageModule>
+  <storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
+</cproject>

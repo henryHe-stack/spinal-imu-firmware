@@ -1,0 +1,19 @@
+# Generated build outputs and runtime data
+**/build/
+**/work/
+**/HostTests/
+**/records/
+**/HostTools/bin/
+**/HostTools/analyzer/
+**/node_modules/
+**/test-results/
+**/playwright-report/
+**/qa/
+data/我的记录/
+measurement-profile.xml
+data/示例数据/*.md
+*.user
+*.suo
+*.lnk
+*.tmp
+.vs/
