@@ -24,7 +24,7 @@
 1. `AcquisitionTask` 是 I2C1、TCA9548A 和 BNO055 的唯一所有者。
 2. `AppSampleFrame` 是 MCU 内部结构，禁止直接 `memcpy` 到串口。
 3. 业务代码不得写入 `Drivers/` 或 `Middlewares/`。
-4. `Core/` 只能修改 CubeMX `USER CODE` 区。
+4. `Core/` 业务接入只写 `USER CODE` 区；外设配置通过 `.ioc` 修改并同步生成区，禁止只改一处。
 5. 协议字段变化必须同步修改版本、编码器、解码器和测试向量。
 6. 占位接口完成后必须删除对应 `TODO(owner)` 并补充失败路径。
 
@@ -36,6 +36,7 @@ cmake --build --preset Debug
 ```
 
 如修改 `.ioc`，还要检查生成 diff、中断优先级、DMA 配置和根 CMake 的业务源文件列表。
+尤其保留62 KB应用Flash边界，避免覆盖校准。具体测试命令见 [Docs/TESTING.md](Docs/TESTING.md)，实物联调见 [Docs/DRIVER_BRINGUP.md](Docs/DRIVER_BRINGUP.md)。
 
 ## Pull Request 要求
 

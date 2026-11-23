@@ -1,4 +1,77 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { crc16 } from "../js/wire.js";
+
+const binaryFixture = JSON.parse(readFileSync(new URL("./fixtures/firmware-v1.json", import.meta.url)));
+function binaryFrame(sequence, invalid = false) {
+  const frame = Uint8Array.from(Buffer.from(binaryFixture.sample, "hex"));
+  const view = new DataView(frame.buffer); view.setUint32(6, sequence, true);
+  for (let i = 0; i < 3; i++) for (const offset of [4, 8, 12]) view.setUint32(11 + i * 40 + offset, 1_000_000 + sequence * 20_000 + i * 5000 + offset * 10, true);
+  if (invalid) frame[13] = 4;
+  view.setUint16(frame.length - 2, crc16(frame.subarray(2, -2)), true);
+  return [...frame];
+}
+async function openBinary(page) {
+  await page.addInitScript(() => {
+    window.testSerialWrites = [];
+    const port = { open: async () => {}, close: async () => {},
+      readable: new ReadableStream({ start(controller) { window.testSerialReceive = (bytes) => controller.enqueue(Uint8Array.from(bytes)); } }),
+      writable: new WritableStream({ write(chunk) { window.testSerialWrites.push([...chunk]); } }),
+    };
+    Object.defineProperty(navigator, "serial", { configurable: true, value: { requestPort: async () => port } });
+  });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("http://127.0.0.1:4173/"); await page.locator("#connectButton").click();
+  return errors;
+}
+
+test("binary startup and recovery preserve the last complete pose and physical units", async ({ page }) => {
+  const errors = await openBinary(page);
+  await page.evaluate((data) => window.testSerialReceive(data), binaryFrame(1, true));
+  await expect(page.locator('[data-node="C0"] .node-state')).toHaveText("无效 / 重连中");
+  await expect(page.locator("#historyCount")).toHaveText("0");
+  await page.evaluate((data) => window.testSerialReceive(data), binaryFrame(2));
+  await expect(page.locator("#historyCount")).toHaveText("1");
+  await page.evaluate((data) => window.testSerialReceive(data), binaryFrame(3, true));
+  await expect(page.locator("#historyCount")).toHaveText("1");
+  await expect(page.locator("#modelState")).toContainText("保留上次完整姿态");
+  await page.evaluate((data) => window.testSerialReceive(data), binaryFrame(4));
+  await expect(page.locator("#historyCount")).toHaveText("2");
+  await page.locator("#tab-curves").click(); await page.locator("#curveSignal").selectOption("acceleration");
+  await expect(page.locator('[data-chart="C0"] .signal-readouts strong')).toHaveText(["-1.23", "9.81", "0.00"]);
+  await expect(page.locator('[data-chart="C0"] .signal-unit')).toHaveText("m/s²");
+  await page.locator("#connectButton").click();
+  await expect(page.locator("#connectionText")).toHaveText("等待连接");
+  expect(errors).toEqual([]);
+});
+
+test("binary controls write commands and display matched replies without losing telemetry", async ({ page }) => {
+  const errors = await openBinary(page);
+  await page.locator("#tab-diagnostics").click();
+  await page.locator('[data-device-command="5"]').click();
+  await expect.poll(() => page.evaluate(() => window.testSerialWrites.length)).toBe(1);
+  const sent = await page.evaluate(() => window.testSerialWrites[0]);
+  expect(sent[10]).toBe(5); expect(sent[11]).toBe(20);
+  const reply = Uint8Array.from(Buffer.from(binaryFixture.reply, "hex"));
+  new DataView(reply.buffer).setUint32(6, 1, true);
+  new DataView(reply.buffer).setUint16(16, crc16(reply.subarray(2, -2)), true);
+  await page.evaluate((data) => window.testSerialReceive(data), [...reply, ...binaryFrame(1)]);
+  await expect(page.locator("#commandResult")).toContainText("请求 1 · 命令 5 · 成功");
+  await expect(page.locator("#frameCount")).toHaveText("1");
+  expect(errors).toEqual([]);
+});
+
+test("binary CRC failure is visible and next valid frame still renders on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openBinary(page);
+  const broken = binaryFrame(1); broken[27] ^= 0x40;
+  await page.evaluate((data) => window.testSerialReceive(data), [...broken, ...binaryFrame(2)]);
+  await expect(page.locator("#historyCount")).toHaveText("1");
+  await page.locator("#tab-diagnostics").click();
+  await expect(page.locator("#parseErrors")).toHaveText("1");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
 
 // In-memory serial transport, not a hardware verification. Known poses keep
 // camera and history tests deterministic even while reception remains active.

@@ -27,8 +27,16 @@ startRendering(Object.values(views));
 
 const state = {
   mode: "idle", latest: {}, nodeSequences: {}, neutral: {}, frameCount: 0, lostCount: 0, parseErrors: 0, bytes: 0,
-  lastSequence: null, lastHistorySequence: null, framesThisWindow: 0, rateWindowAt: performance.now(), rows: [],
+  lastSequence: null, lastHistorySequence: null, framesThisWindow: 0, rateWindowAt: performance.now(), rows: [], dataGap: false,
 };
+const pendingCommands = new Map();
+
+function beginSource() {
+  // A newly connected device may reuse a sequence seen in an older session.
+  // Never assemble its partial frame using previous devices' node samples.
+  state.latest = {}; state.nodeSequences = {};
+  state.lastSequence = null; state.lastHistorySequence = null; state.dataGap = true;
+}
 
 const timeline = new PoseTimeline({
   range: elements.timelineRange, ticks: elements.timelineTicks, canvas: elements.timelineCanvas,
@@ -72,6 +80,12 @@ function adjustedSample(node, sample) {
 
 function updateCard(node, sample, immediate, displayMode) {
   const card = cards[node];
+  if (sample.valid === false || !sample.q) {
+    for (const field of ["roll", "pitch", "yaw", "quaternion", "calibration"]) $(`[data-field='${field}']`, card).textContent = "—";
+    $(".node-state", card).textContent = "无效 / 重连中";
+    $(".node-state", card).classList.remove("live");
+    return null; // Freeze the last valid chip pose; never invent identity data.
+  }
   const adjusted = adjustedSample(node, sample);
   const euler = quaternionToEulerDegrees(adjusted.q);
   $("[data-field='roll']", card).textContent = formatAngle(euler.roll);
@@ -104,31 +118,43 @@ function renderSnapshot(snapshot, immediate = false) {
 }
 
 function buildCompleteSnapshot(frame) {
-  const allCurrent = NODE_IDS.every((node) => state.latest[node] && state.nodeSequences[node] === frame.sequence);
+  const allCurrent = NODE_IDS.every((node) => state.latest[node]?.q && state.latest[node].valid !== false && state.nodeSequences[node] === frame.sequence);
   if (!allCurrent || frame.sequence === state.lastHistorySequence) return null;
   state.lastHistorySequence = frame.sequence;
   const samples = Object.fromEntries(NODE_IDS.map((node) => [node, structuredClone(state.latest[node])]));
   const timestampUs = Math.max(...NODE_IDS.map((node) => samples[node].timestampUs));
   return {
-    sequence: frame.sequence, timestampUs, receivedAt: Date.now(), samples,
+    sequence: frame.sequence, timestampUs, receivedAt: Date.now(), samples, vectorUnits: frame.vectorUnits,
+    dataGap: state.dataGap,
     angleDegrees: quaternionAngleDegrees(relativeQuaternion(samples.C7.q, samples.C0.q)),
   };
 }
 
 function processFrame(frame, rawLine = "") {
-  if (state.lastSequence !== null && frame.sequence > state.lastSequence + 1) state.lostCount += frame.sequence - state.lastSequence - 1;
-  if (frame.sequence > state.lastSequence || state.lastSequence === null) state.lastSequence = frame.sequence;
+  if (state.lastSequence !== null && frame.sequence !== state.lastSequence) {
+    const delta = (frame.sequence - state.lastSequence) >>> 0;
+    if (delta < 0x80000000) state.lostCount += delta - 1;
+    else { state.lastHistorySequence = null; state.dataGap = true; }
+    if (delta !== 1) state.dataGap = true;
+  }
+  state.lastSequence = frame.sequence;
   for (const sample of frame.samples) {
     state.latest[sample.node] = sample;
     state.nodeSequences[sample.node] = frame.sequence;
   }
+  // Reception continues during historical playback, including quality gaps.
+  if (frame.samples.some((sample) => sample.valid === false)) state.dataGap = true;
 
   const snapshot = buildCompleteSnapshot(frame);
-  if (snapshot) timeline.add(snapshot);
+  if (snapshot) { timeline.add(snapshot); state.dataGap = false; }
   else if (timeline.live) {
     // A single-node bring-up stream remains visible before all three nodes
     // have produced a matching acquisition cycle for model reconstruction.
     for (const sample of frame.samples) updateCard(sample.node, sample, false, "实时");
+    if (frame.samples.some((sample) => sample.valid === false)) {
+      elements.modelState.textContent = "节点未就绪 · 保留上次完整姿态";
+      for (const id of ["c0c4Angle", "c4c7Angle", "c0c7Angle"]) $(`#${id}`).textContent = "—";
+    }
   }
   state.frameCount += 1;
   state.framesThisWindow += 1;
@@ -144,9 +170,13 @@ function processFrame(frame, rawLine = "") {
 function appendRows(frame) {
   const receivedAt = new Date().toISOString();
   for (const sample of frame.samples) {
+    if (sample.valid === false || !sample.q) {
+      state.rows.push([receivedAt, frame.sequence, sample.node, sample.timestampRawUs ?? sample.timestampUs, "", "", "", "", "", "", "", sample.calibration, sample.flags]);
+      continue;
+    }
     const q = adjustedSample(sample.node, sample).q;
     const e = quaternionToEulerDegrees(q);
-    state.rows.push([receivedAt, frame.sequence, sample.node, sample.timestampUs, q.w, q.x, q.y, q.z, e.roll, e.pitch, e.yaw, sample.calibration, sample.flags]);
+    state.rows.push([receivedAt, frame.sequence, sample.node, sample.timestampRawUs ?? sample.timestampUs, q.w, q.x, q.y, q.z, e.roll, e.pitch, e.yaw, sample.calibration, sample.flags]);
   }
   if (state.rows.length > 100_000) state.rows.splice(0, 10_000);
 }
@@ -165,8 +195,17 @@ function handleLine(line) {
 
 const serial = new SerialSource({
   onLine: handleLine,
+  onFrame: (frame) => processFrame(frame, `BINARY v1 · seq=${frame.sequence} · ${frame.samples.length} nodes`),
+  onReply: (reply) => {
+    window.clearTimeout(pendingCommands.get(reply.requestId)); pendingCommands.delete(reply.requestId);
+    $("#commandResult").textContent = `请求 ${reply.requestId} · 命令 ${reply.command} · ${reply.status === 0 ? "成功" : `状态 ${reply.status}`} · 返回 ${reply.value}`;
+  },
+  onProtocolError: (error) => { state.parseErrors++; elements.parseErrors.textContent = state.parseErrors.toLocaleString(); elements.latestLine.textContent = error.message; },
   onBytes: (count) => { state.bytes += count; elements.byteCount.textContent = formatBytes(state.bytes); },
-  onState: (serialState) => setConnection(serialState === "connected" ? "serial" : "idle", serialState === "connected" ? "串口采集中" : "等待连接"),
+  onState: (serialState) => {
+    if (serialState === "connected") beginSource();
+    setConnection(serialState === "connected" ? "serial" : "idle", serialState === "connected" ? "串口采集中" : "等待连接");
+  },
   onError: (error) => { setConnection("error", "串口异常"); showToast(error.message); },
 });
 const demo = new DemoSource(processFrame);
@@ -186,12 +225,12 @@ elements.connect.addEventListener("click", async () => {
 elements.demo.addEventListener("click", async () => {
   if (state.mode === "demo") { demo.stop(); setConnection("idle", "等待连接"); return; }
   if (state.mode === "serial") await serial.disconnect();
-  demo.start(); setConnection("demo", "模拟数据运行中");
+  beginSource(); demo.start(); setConnection("demo", "模拟数据运行中");
 });
 
 elements.neutral.addEventListener("click", () => {
   const reference = timeline.currentSnapshot()?.samples ?? state.latest;
-  if (!NODE_IDS.every((node) => reference[node])) { showToast("需要先接收到 C0、C4、C7 三个节点的数据"); return; }
+  if (!NODE_IDS.every((node) => reference[node]?.q)) { showToast("需要先接收到 C0、C4、C7 三个节点的有效数据"); return; }
   for (const node of NODE_IDS) state.neutral[node] = { ...reference[node].q };
   curves.invalidate();
   renderSnapshot(timeline.currentSnapshot(), true);
@@ -217,6 +256,25 @@ window.setInterval(() => {
 }, 1000);
 
 if (!SerialSource.supported()) elements.connect.title = "需要桌面版 Chrome 或 Edge 的 Web Serial 支持";
+let requestId = 0;
+document.querySelectorAll("[data-device-command]").forEach((button) => button.addEventListener("click", async () => {
+  if (state.mode !== "serial") { showToast("设备命令需要连接真实串口"); return; }
+  const id = ++requestId;
+  try {
+    button.disabled = true;
+    $("#commandResult").textContent = `请求 ${id} 已发送，等待设备应答`;
+    pendingCommands.set(id, window.setTimeout(() => {
+      pendingCommands.delete(id);
+      $("#commandResult").textContent = `请求 ${id} 应答超时，请检查串口、固件和设备状态`;
+    }, 3000));
+    await serial.sendCommand(Number(button.dataset.deviceCommand), id,
+      button.dataset.deviceCommand === "5" ? Number($("#devicePeriod").value) : 0);
+  } catch (error) {
+    window.clearTimeout(pendingCommands.get(id)); pendingCommands.delete(id);
+    $("#commandResult").textContent = `请求 ${id} 发送失败：${error.message}`; showToast(error.message);
+  }
+  finally { button.disabled = false; }
+}));
 if (new URLSearchParams(window.location.search).get("demo") === "1") {
   demo.start(); setConnection("demo", "模拟数据运行中");
 }

@@ -13,6 +13,7 @@ typedef struct
 } BspI2c;
 
 AppStatus BspI2c_Init(BspI2c *self, I2C_HandleTypeDef *hal);
+AppStatus BspI2c_Recover(BspI2c *self);
 AppStatus BspI2c_IsReady(BspI2c *self, uint8_t address_7bit);
 AppStatus BspI2c_MasterWrite(BspI2c *self,
                             uint8_t address_7bit,

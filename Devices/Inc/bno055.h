@@ -20,6 +20,11 @@ typedef struct
     AppImuNodeId node_id;
     bool present;
     bool configured;
+    uint8_t init_step;
+    uint8_t consecutive_errors;
+    uint32_t due_ms;
+    uint8_t calibration[22];
+    bool calibration_available;
 } Bno055;
 
 AppStatus Bno055_InitObject(Bno055 *self,
@@ -31,6 +36,9 @@ AppStatus Bno055_InitObject(Bno055 *self,
                             AppImuNodeId node_id);
 AppStatus Bno055_Probe(Bno055 *self);
 AppStatus Bno055_Configure(Bno055 *self);
+/* One state-machine step per poll. BUSY means a required settling interval. */
+AppStatus Bno055_Service(Bno055 *self);
+AppStatus Bno055_CaptureCalibration(Bno055 *self);
 AppStatus Bno055_ReadSample(Bno055 *self, AppImuSample *sample);
 
 #endif /* BNO055_H */

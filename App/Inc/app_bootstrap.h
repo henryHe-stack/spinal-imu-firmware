@@ -7,7 +7,8 @@
 typedef struct
 {
     I2C_HandleTypeDef *i2c;
-    UART_HandleTypeDef *uart;
+    UART_HandleTypeDef *uart_pc;
+    UART_HandleTypeDef *uart_bt;
     TIM_HandleTypeDef *timestamp_timer;
 } AppBootstrapConfig;
 

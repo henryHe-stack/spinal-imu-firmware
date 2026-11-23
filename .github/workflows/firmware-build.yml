@@ -10,6 +10,28 @@ permissions:
   contents: read
 
 jobs:
+  host-checks:
+    name: Host C and protocol checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native production driver tests with mock HAL
+        run: |
+          cmake -S Tests -B build/host-tests
+          cmake --build build/host-tests
+          ctest --test-dir build/host-tests --output-on-failure
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: HostApp/package-lock.json
+      - name: Host protocol unit tests
+        working-directory: HostApp
+        run: |
+          npm ci
+          npm test
+
   debug-build:
     name: ARM GCC Debug build
     runs-on: ubuntu-latest

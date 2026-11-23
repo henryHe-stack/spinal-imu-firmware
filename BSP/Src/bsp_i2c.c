@@ -1,6 +1,32 @@
 #include "bsp_i2c.h"
+#include <stdbool.h>
 
 #include "app_config.h"
+
+AppStatus BspI2c_Recover(BspI2c *self)
+{
+    if (!self || !self->hal || self->hal->Instance != I2C1) return APP_STATUS_INVALID_ARGUMENT;
+    /* Only AcquisitionTask calls this. Open-drain pulses release the lines;
+     * a physically stuck slave may still require a hardware power cycle. */
+    HAL_I2C_DeInit(self->hal);
+    GPIO_InitTypeDef gpio = {0};
+    gpio.Pin = GPIO_PIN_6 | GPIO_PIN_7; gpio.Mode = GPIO_MODE_OUTPUT_OD;
+    gpio.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_WritePin(GPIOB, gpio.Pin, GPIO_PIN_SET); HAL_GPIO_Init(GPIOB, &gpio);
+    for (unsigned i = 0; i < 9 && HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7) == GPIO_PIN_RESET; ++i)
+    {
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); HAL_Delay(1);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET); HAL_Delay(1);
+    }
+    bool scl_free = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_SET;
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET); HAL_Delay(1);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET); HAL_Delay(1);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+    bool sda_free = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7) == GPIO_PIN_SET;
+    __HAL_RCC_I2C1_FORCE_RESET(); __HAL_RCC_I2C1_RELEASE_RESET();
+    if (HAL_I2C_Init(self->hal) != HAL_OK || !scl_free || !sda_free) return APP_STATUS_IO_ERROR;
+    return APP_STATUS_OK;
+}
 
 static AppStatus BspI2c_FromHalStatus(HAL_StatusTypeDef status)
 {

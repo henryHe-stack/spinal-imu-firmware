@@ -3,6 +3,7 @@
 
 #include "FreeRTOS.h"
 #include "queue.h"
+#include "task.h"
 
 #include "bsp_i2c.h"
 #include "bsp_time.h"
@@ -14,9 +15,11 @@ typedef struct
     SensorService *sensor_service;
     BspI2c *i2c;
     BspTime *timebase;
-    BspUart *uart;
+    BspUart *ports[APP_PORT_COUNT];
     QueueHandle_t sample_queue;
     QueueHandle_t command_queue;
+    QueueHandle_t reply_queue;
+    TaskHandle_t task_handles[4];
 } AppTaskContext;
 
 void AcquisitionTask_Entry(void *argument);
