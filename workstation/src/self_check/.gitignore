@@ -1,0 +1,7 @@
+/build/
+/records/
+/releases/
+/.metadata/
+/.settings/
+*.launch
+

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+  <name>ImuSelfCheck_F103C8</name>
+  <comment>Isolated hardware polling self-check, FreeRTOS, TIM3 microsecond read windows, text UART report.</comment>
+  <projects/>
+  <buildSpec>
+    <buildCommand><name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name><triggers>clean,full,incremental,</triggers><arguments/></buildCommand>
+    <buildCommand><name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name><triggers>full,incremental,</triggers><arguments/></buildCommand>
+  </buildSpec>
+  <natures>
+    <nature>com.st.stm32cube.ide.mcu.MCUProjectNature</nature>
+    <nature>org.eclipse.cdt.core.cnature</nature>
+    <nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+    <nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
+  </natures>
+</projectDescription>
