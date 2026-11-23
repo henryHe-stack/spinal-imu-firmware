@@ -3,7 +3,9 @@
 #include <stdint.h>
 typedef enum { HAL_OK=0, HAL_ERROR=1 } HAL_StatusTypeDef;
 typedef struct { int unused; } I2C_HandleTypeDef;
-typedef struct { void *hdmarx; void *hdmatx; } UART_HandleTypeDef;
+typedef struct { uint32_t remaining; } DMA_HandleTypeDef;
+typedef struct { DMA_HandleTypeDef *hdmarx; DMA_HandleTypeDef *hdmatx; } UART_HandleTypeDef;
+#define __HAL_DMA_GET_COUNTER(dma) ((dma)->remaining)
 typedef struct { void *Instance; struct { uint32_t Prescaler, Period; } Init;
     uint32_t counter, flags; } TIM_HandleTypeDef;
 #define TIM2 ((void *)2)

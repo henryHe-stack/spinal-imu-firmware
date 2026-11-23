@@ -71,10 +71,15 @@ size_t BspUart_ReadAvailable(BspUart *self, uint8_t *data, size_t capacity)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *hal, uint16_t size)
 {
     BspUart *self = Find(hal);
-    if (!self || self->rx_restart || size > APP_UART_RX_DMA_SIZE) return;
-    uint16_t position = size % APP_UART_RX_DMA_SIZE;
-    /* HT/TC/IDLE may repeat an offset; keep HT enabled so a full revolution
-     * cannot be confused with zero new bytes. ISR latency must be < half ring. */
+    (void)size;
+    if (!self || self->rx_restart) return;
+    /* A pending HT/TC callback can report an offset older than an IDLE
+     * callback. Read the live DMA cursor on every event to avoid replays.
+     * Keep HT enabled and service each event within half a DMA buffer. */
+    uint32_t remaining = __HAL_DMA_GET_COUNTER(hal->hdmarx);
+    if (remaining > APP_UART_RX_DMA_SIZE) return;
+    uint16_t position = (uint16_t)((APP_UART_RX_DMA_SIZE - remaining) % APP_UART_RX_DMA_SIZE);
+    __DMB();
     while (self->dma_position != position)
     {
         uint8_t byte = self->rx_dma[self->dma_position];

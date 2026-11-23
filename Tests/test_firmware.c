@@ -111,20 +111,40 @@ static void TestBnoAndMux(void)
     CHECK(sensor.configured && sensor.calibration_available);
     CHECK(registers[0x55]==1 && registers[0x6A]==22);
 }
+static void MockRxEvent(UART_HandleTypeDef *uart, uint16_t reported, uint16_t actual)
+{
+    uart->hdmarx->remaining=APP_UART_RX_DMA_SIZE-actual;
+    HAL_UARTEx_RxEventCallback(uart,reported);
+}
 static void TestUart(void)
 {
     static BspUart a,b; static UART_HandleTypeDef ha,hb;
-    ha.hdmarx=ha.hdmatx=&ha; hb.hdmarx=hb.hdmatx=&hb;
+    static DMA_HandleTypeDef dma_a,dma_b;
+    ha.hdmarx=ha.hdmatx=&dma_a; hb.hdmarx=hb.hdmatx=&dma_b;
     CHECK(BspUart_Init(&a,&ha)==APP_STATUS_OK && BspUart_Init(&b,&hb)==APP_STATUS_OK);
     for(unsigned i=0;i<128;++i) a.rx_dma[i]=(uint8_t)i;
-    HAL_UARTEx_RxEventCallback(&ha,64); HAL_UARTEx_RxEventCallback(&ha,64);
-    HAL_UARTEx_RxEventCallback(&ha,128); HAL_UARTEx_RxEventCallback(&ha,128);
+    MockRxEvent(&ha,64,64); MockRxEvent(&ha,64,64);
+    MockRxEvent(&ha,128,128); MockRxEvent(&ha,128,0);
     uint8_t out[512]; CHECK(BspUart_ReadAvailable(&a,out,sizeof(out))==128);
     for(unsigned i=0;i<128;++i) CHECK(out[i]==i);
     CHECK(BspUart_ReadAvailable(&b,out,sizeof(out))==0);
-    HAL_UARTEx_RxEventCallback(&ha,5); CHECK(BspUart_ReadAvailable(&a,out,3)==3 && out[2]==2);
+    /* A pending DMA half-transfer IRQ can follow an IDLE ISR that read past it. */
+    MockRxEvent(&ha,66,66);
+    MockRxEvent(&ha,64,66);
+    CHECK(BspUart_ReadAvailable(&a,out,sizeof(out))==66);
+    for(unsigned i=0;i<66;++i) CHECK(out[i]==i);
+    MockRxEvent(&ha,128,128);
+    CHECK(BspUart_ReadAvailable(&a,out,sizeof(out))==62 && out[0]==66 && out[61]==127);
+    /* Likewise a pending DMA transfer-complete IRQ can follow a wrap. */
+    MockRxEvent(&ha,64,64);
+    MockRxEvent(&ha,5,5);
+    MockRxEvent(&ha,128,5);
+    CHECK(BspUart_ReadAvailable(&a,out,sizeof(out))==133 && out[127]==127 && out[132]==4);
+    MockRxEvent(&ha,128,128);
+    CHECK(BspUart_ReadAvailable(&a,out,sizeof(out))==123);
+    MockRxEvent(&ha,5,5); CHECK(BspUart_ReadAvailable(&a,out,3)==3 && out[2]==2);
     CHECK(BspUart_ReadAvailable(&a,out,3)==2 && out[1]==4);
-    for(unsigned i=0;i<6;++i) { HAL_UARTEx_RxEventCallback(&ha,64); HAL_UARTEx_RxEventCallback(&ha,128); }
+    for(unsigned i=0;i<6;++i) { MockRxEvent(&ha,64,64); MockRxEvent(&ha,128,128); }
     CHECK(a.rx_overflows>0 && BspUart_ReadAvailable(&a,out,sizeof(out))==511);
     unsigned before=rx_calls; HAL_UART_ErrorCallback(&ha); CHECK(a.rx_restart);
     BspUart_Service(&a); CHECK(!a.rx_restart && rx_calls==before+1 && a.rx_head==a.rx_tail);

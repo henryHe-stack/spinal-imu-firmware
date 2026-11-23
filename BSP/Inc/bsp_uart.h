@@ -30,7 +30,7 @@ AppStatus BspUart_SendDma(BspUart *self, const uint8_t *data, size_t length);
 void BspUart_Service(BspUart *self);
 
 /*
- * CommandTask is the sole consumer. DMA ISR is the sole producer.
+ * CommandTask is the sole consumer; serialized DMA and UART ISRs produce.
  */
 size_t BspUart_ReadAvailable(BspUart *self, uint8_t *data, size_t capacity);
 
