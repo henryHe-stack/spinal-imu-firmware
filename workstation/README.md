@@ -68,6 +68,8 @@ Windows C 算法依次执行数值与时间质量检查、共同参考转换、�
 
 ## 连接样机
 
+工作站应配套烧录本目录 `firmware/main_*` 下的 D0 固件，并使用 USART2（PA2/PA3）。仓库根目录的双串口固件使用另一种二进制帧格式，其 PC 口为 USART1（PA9/PA10），需配套根目录 `HostApp/`，不能与此工作站混用。切换固件前备份已有校准数据，避免全片擦除。
+
 1. 按样机原理图接好电源、公共地、TCA9548A 和三个 IMU。
 2. 使用 ST-LINK 接 SWDIO、SWCLK 和公共地，核对供电连接。
 3. 在 STM32CubeProgrammer 或调试工具中选择对应 ELF 并下载。firmware 目录中每个配置提供 ELF、HEX 和 BIN，常用 ELF 文件进行烧录。
@@ -130,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/self-check.ps1 -Port C
 
 桌面程序构建使用 Windows 主机版 GCC 和系统 .NET Framework C# 编译器。主固件及自检构建使用 ARM GCC，主固件同时使用 CMake 和 Ninja。STM32CubeIDE 可提供 ARM 工具链、CMake 和 Ninja，CubeMX 用于编辑 src/stm32/Spinal_tester.ioc。
 
-WebView2 SDK 1.0.2903.40 已固定在 dependencies 目录，Three.js、控制器和字体均在 src/HostApp/vendor。桌面构建会从 C 源码编译解算 DLL 和模拟器，再生成一体版 EXE。以下命令均在仓库根目录执行。
+WebView2 SDK 1.0.2903.40 已固定在 dependencies 目录，Three.js、控制器和字体均在 src/HostApp/vendor。桌面构建会从 C 源码编译解算 DLL 和模拟器，再生成一体版 EXE。以下命令均在 `workstation/` 目录执行。
 
 ```powershell
 # 构建桌面工作站，更新 app

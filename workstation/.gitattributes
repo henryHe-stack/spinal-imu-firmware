@@ -8,3 +8,5 @@
 *.dll binary
 *.nupkg binary
 *.woff2 binary
+# Preserve the SDK license bytes listed in SHA256SUMS.txt.
+/app/WebView2-LICENSE.txt -text
