@@ -67,5 +67,5 @@ status：0 OK、1 INVALID_ARGUMENT、2 NOT_INITIALIZED、3 BUSY、4 TIMEOUT、5 
 命令队列/应答队列满时可能丢弃，主机需超时处理；当前网页等待 3 s，不自动重试。
 当前不定期推送完整诊断快照；`DiagnosticsService_GetSnapshot()` 用于调试器/后续诊断接口。
 
-固定互通向量：`HostApp/tests/fixtures/firmware-v1.json`，由生产 C 编码器生成并由 CTest 比对，JS 测试读取同一文件。
+固定互通向量：固件测试比对 `Tests/fixtures/firmware-v1.json` 和生产 C 编码器输出。JS 测试使用 `HostApp/tests/fixtures/firmware-v1.json`；完整仓库的 CTest 同时检查两份向量一致。
 旧 NDJSON/CSV 仅保留给旧设备/测试工具，固件默认只发送上述二进制协议。

@@ -112,3 +112,12 @@ SAVE会短暂进入CONFIGMODE，返回NDOF；它不会计算人体中立位，�
 
 参考：Bosch官方 [SensorAPI头文件](https://github.com/boschsensortec/BNO055_SensorAPI/blob/master/bno055.h) / [实现](https://github.com/boschsensortec/BNO055_SensorAPI/blob/master/bno055.c)。
 HAL接收/中断行为以工程所带 `stm32f1xx_hal_uart.c`、`stm32f1xx_hal_tim.c` 与 `stm32f1xx_hal_iwdg.c` 为依据。
+
+## 9. HC-05 到 Windows 上位机
+
+1. `PA2 / USART2_TX → HC-05 RXD`，`PA3 / USART2_RX ← HC-05 TXD`，两端共地。按模块规格核对供电，UART 信号使用 3.3 V 逻辑。`STATE → PA4` 仅供诊断，不是发送使能。
+2. 按模块的 AT 手册配置从机模式和 `115200 8N1` 数据透传。退出 AT 模式后在 Windows 配对，PIN 以模块配置为准；在蓝牙串口设置中选择该模块的**传出** COM 口。
+3. 用支持 HEX 显示的串口工具检查是否持续出现三节点采样帧头 `A5 5A 01 01 7D 00`。关闭工具以释放端口；仅看到帧头不能证明 CRC 或姿态数据有效。
+4. 用 [HostApp](../HostApp/README.md) 或兼容 [串口协议 v1](WIRE_PROTOCOL.md) 的上位机核对 CRC、序号和 C0/C4/C7 有效标记。分别轻转三个节点，确认对应四元数变化，记录有效帧率和跳号。
+
+配对后无字节，先核对传出 COM、透传模式、USART2 接线和模块端速率，必要时用 USART1 有线口对照。收到字节但姿态无效时，检查 BNO055 初始化、TCA 通道和节点标记。这是台架验证步骤，不代表已完成实板蓝牙验收。
