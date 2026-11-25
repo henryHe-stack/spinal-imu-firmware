@@ -17,5 +17,6 @@ endif()
 add_test(NAME firmware_behavior COMMAND firmware_tests)
 add_test(NAME firmware_wire_golden COMMAND ${CMAKE_COMMAND}
   -DPROGRAM=$<TARGET_FILE:firmware_tests>
-  -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../HostApp/tests/fixtures/firmware-v1.json
+  -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/firmware-v1.json
+  -DHOST_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../HostApp/tests/fixtures/firmware-v1.json
   -P ${CMAKE_CURRENT_SOURCE_DIR}/check_fixture.cmake)

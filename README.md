@@ -97,6 +97,8 @@ cmake --build --preset Debug
 
 ## 上位机
 
+STM32 固件和 PC 上位机独立构建。根目录的 CMake 目标只编译固件，不依赖 Node.js 或 `HostApp/`；相对角和三维模型在 PC 浏览器中计算。两端通过 [A5 5A 串口协议 v1](Docs/WIRE_PROTOCOL.md) 对接，可使用 USART1 有线串口或 USART2 的 HC-05 透传，参见 [蓝牙联调](Docs/DRIVER_BRINGUP.md#9-hc-05-到-windows-上位机)。`workstation/` 是另一套 D0 工作站，不能直接解读本固件的 `A5 5A` 帧。
+
 `HostApp/` 提供浅色学术仪器风格的浏览器上位机：
 
 - **姿态重建**：驾驶坐姿人体、透明座椅、突出的颈椎结构与三个独立 IMU 位姿视图；支持旋转、平移、缩放和预设视角。

@@ -23,7 +23,7 @@ cmake --build build/host-tests
 ctest --test-dir build/host-tests --output-on-failure
 ```
 
-两个CTest入口：实际驱动行为测试，以及C编码结果与JS固定向量比对。
+两个 CTest 入口：实际驱动行为测试，以及 C 编码结果与 `Tests/fixtures/firmware-v1.json` 比对。固件测试可在不含 `HostApp/` 的工程中运行；完整仓库中同时检验网页和固件测试向量一致。
 链接实际 `protocol_service.c`、`bno055.c`、`tca9548a.c`、`bsp_uart.c`、`bsp_time.c`，仅替换HAL/I2C边界。
 覆盖CRC标准向量、错误/截断/连续命令、编码容量、BNO模式/延时/单位/寄存器解码/校准/失败重试、
 TCA单通道缓存、双UART隔离/HT-TC-IDLE去重/环回/溢出/持久TX/超时、TIM2待处理中断/32位回绕。
