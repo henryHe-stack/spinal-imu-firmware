@@ -42,7 +42,7 @@ internal sealed class DesktopHost : Form
         string build=AppDomain.CurrentDomain.BaseDirectory;
         engine=new DataEngine(MeasurementFiles.Root(build),build);
         engine.BeforeStart=delegate {
-            if(serial!=null) throw new InvalidOperationException("请在三维页断开文本预览串口，再启动正式测量。");
+            if(serial!=null) throw new InvalidOperationException("请在三维页断开预览串口，再启动正式测量。");
         };
         engine.Pipe.DisplayBytes=delegate(byte[] data,int count) {
             display.Append(engine.Kind,data,count);
@@ -130,7 +130,7 @@ internal sealed class DesktopHost : Form
                 var choice = new ComboBox {Left=16,Top=42,Width=175,DropDownStyle=ComboBoxStyle.DropDownList};
                 var refresh = new Button {Text="刷新",Left=199,Top=40};
                 var ok = new Button {Text="连接",Left=293,Top=40,DialogResult=DialogResult.OK};
-                var textOnly=new CheckBox {Text="仅预览文本协议 / 独立串口",AutoSize=true,Left=16,Top=77,Checked=baud!=115200 && baud!=230400};
+                var previewOnly=new CheckBox {Text="仅预览 A5 5A / NDJSON / CSV",AutoSize=true,Left=16,Top=77,Checked=baud!=115200 && baud!=230400,Enabled=baud==115200 || baud==230400};
                 Action scan = delegate {
                     var prior = choice.SelectedItem;
                     choice.Items.Clear(); choice.Items.AddRange(SerialPort.GetPortNames().OrderBy(x=>x).ToArray());
@@ -139,10 +139,10 @@ internal sealed class DesktopHost : Form
                     ok.Enabled=choice.SelectedIndex>=0;
                 };
                 refresh.Click += delegate { scan(); };
-                dialog.Controls.AddRange(new Control[]{new Label {Text="D0 样机共用正式测量串口。请选择 COM 口。",AutoSize=true,Top=12,Left=16}, choice,refresh,ok,textOnly});
+                dialog.Controls.AddRange(new Control[]{new Label {Text="请选择 COM 口。默认连接 D0 正式测量。",AutoSize=true,Top=12,Left=16}, choice,refresh,ok,previewOnly});
                 dialog.AcceptButton=ok; scan();
                 if (dialog.ShowDialog(this)!=DialogResult.OK || choice.SelectedItem==null) { Send("cancel|"+id); return; }
-                if(!textOnly.Checked) {
+                if(!previewOnly.Checked) {
                     measurement.ConnectDevice(choice.SelectedItem.ToString(),baud);
                     Send("cancel|"+id); display.Refresh(); return;
                 }
