@@ -14,6 +14,22 @@ npm start
 
 浏览器打开 `http://127.0.0.1:4173`。点击“连接串口”后选择 USB 转串口设备，默认参数为 `115200 8N1`。没有硬件时可点击“运行模拟数据”检查界面和数据链。
 
+## Windows 工作站
+
+本目录的界面也用于 [Windows 工作站](../workstation/README.md) 的“三维观察”页。修改页面后，在仓库根目录运行下列命令，再双击 `workstation/01_启动工作站.cmd`。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File workstation/tools/build.ps1 -Target App
+```
+
+| 使用方式 | 串口和功能 |
+|---|---|
+| 浏览器上位机 | 通过 Web Serial 接收 A5 5A、NDJSON 或 CSV。设备控制使用 A5 5A 命令 |
+| Windows 正式测量与记录 | 使用 workstation 主固件的 D0/NCK1 数据。串口由测量页管理，原始三节点四元数同时驱动三维观察 |
+| Windows 串口预览 | 在串口选择框勾选“仅预览 A5 5A / NDJSON / CSV”。三维页显示姿态，A5 5A 设备控制在浏览器上位机使用 |
+
+Windows 的三维页可使用系统保存对话框导出 CSV。安装参数、静止归零、完整 BIN 记录和文件回放在“正式测量与记录”页操作。开始正式测量前先断开独立预览串口。
+
 ## 工作窗口与数据曲线
 
 顶部的三个标签切换工作窗口，采集链路和显示帧时间始终可见；切换不会断开串口、重启模拟源或清空历史。
