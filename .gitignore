@@ -5,6 +5,7 @@
 /HostApp/playwright-report/
 .cache/
 .vscode/
+/CMakeUserPresets.json
 .idea/
 *.elf
 *.bin

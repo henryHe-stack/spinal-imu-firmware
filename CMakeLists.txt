@@ -34,6 +34,22 @@ enable_language(C ASM)
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+option(SPINAL_UART_SMOKE "Build the standalone dual-UART text test" OFF)
+option(SPINAL_I2C_DIAG "Build the standalone I2C diagnostic" OFF)
+if(SPINAL_UART_SMOKE AND SPINAL_I2C_DIAG)
+    message(FATAL_ERROR "Select only one standalone diagnostic")
+endif()
+if(SPINAL_UART_SMOKE)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SPINAL_UART_SMOKE=1)
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME Spinal_tester_uart_smoke)
+endif()
+
+if(SPINAL_I2C_DIAG)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SPINAL_I2C_DIAG=1)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE App/Src/i2c_diagnostic.c)
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME Spinal_tester_i2c_diag)
+endif()
+
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 

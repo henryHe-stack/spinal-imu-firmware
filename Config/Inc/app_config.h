@@ -7,6 +7,10 @@
 #define APP_ACQUISITION_PERIOD_MS        (20U)
 #define APP_HEALTH_PERIOD_MS             (1000U)
 
+/* 0: one directly wired BNO055 (C0); 1: three sensors behind the TCA9548A. */
+#ifndef APP_USE_TCA9548A
+#define APP_USE_TCA9548A                 (1U)
+#endif
 /* TCA9548A and BNO055 use 7-bit I2C addresses in application code. */
 #define APP_TCA9548A_ADDRESS_7BIT        (0x70U)
 #define APP_BNO055_ADDRESS_7BIT          (0x28U)
@@ -27,7 +31,8 @@
 #define APP_BT_STREAM_ENABLED            (1U)
 /* NDOF uses magnetometer: evaluate magnetic interference in the actual seat. */
 #define APP_BNO055_OPERATION_MODE        (0x0CU)
-#define APP_BNO055_EXTERNAL_CRYSTAL      (1U)
+/* Bench A/B test: use the BNO055 internal oscillator without changing the I2C topology. */
+#define APP_BNO055_EXTERNAL_CRYSTAL      (0U)
 #define APP_BNO055_AXIS_MAP              (0x24U)
 #define APP_BNO055_AXIS_SIGN             (0x00U)
 #define APP_SENSOR_RETRY_MS              (1500U)

@@ -4,6 +4,7 @@
 #include "bno055.h"
 #include "bsp_uart.h"
 #include "protocol_service.h"
+#include "sensor_service.h"
 
 /* Assertions remain active for Release host tests too. All hardware-facing
  * functions below are mocks; production drivers above are linked unchanged. */
@@ -68,6 +69,25 @@ static void TestProtocol(void)
     CHECK(ProtocolService_EncodeSampleFrame(&frame,out,sizeof(out),&length)==APP_STATUS_OK && length==133);
     CHECK(ProtocolService_EncodeSampleFrame(NULL,out,sizeof(out),&length)==APP_STATUS_INVALID_ARGUMENT);
 }
+static void TestSamplePublishGate(void)
+{
+    AppSampleFrame frame={0};
+    frame.sample_count=APP_IMU_NODE_COUNT;
+
+    /* Do not publish a cycle that contains no real measurement. */
+    CHECK(!SensorService_FrameHasValidSample(&frame));
+    frame.samples[0].flags=APP_SAMPLE_FLAG_SENSOR_ERROR;
+    frame.samples[2].flags=APP_SAMPLE_FLAG_NOT_CALIBRATED;
+    CHECK(!SensorService_FrameHasValidSample(&frame));
+
+    /* A single usable node is enough; other fixed slots remain observable. */
+    frame.samples[1].flags=APP_SAMPLE_FLAG_VALID | APP_SAMPLE_FLAG_NOT_CALIBRATED;
+    CHECK(SensorService_FrameHasValidSample(&frame));
+
+    /* Internal frames must never advertise more slots than the wire model. */
+    frame.sample_count=(uint8_t)(APP_IMU_NODE_COUNT+1U);
+    CHECK(!SensorService_FrameHasValidSample(&frame));
+}
 static void TestBnoAndMux(void)
 {
     BspI2c bus={0}; Tca9548a mux; Bno055 sensor; AppImuSample sample;
@@ -85,7 +105,8 @@ static void TestBnoAndMux(void)
     tick+=20; CHECK(Bno055_Service(&sensor)==APP_STATUS_BUSY && registers[0x3D]==0);
     before=transfers; tick+=24; CHECK(Bno055_Service(&sensor)==APP_STATUS_BUSY && transfers==before);
     for(unsigned i=0;i<100 && !sensor.configured;++i) { tick+=20; Bno055_Service(&sensor); }
-    CHECK(sensor.configured && registers[0x3D]==12 && registers[0x3B]==0 && registers[0x3F]==0x80);
+    CHECK(sensor.configured && registers[0x3D]==12 && registers[0x3B]==0);
+    CHECK(registers[0x3F]==(APP_BNO055_EXTERNAL_CRYSTAL ? 0x80U : 0U));
     CHECK(registers[0x41]==0x24 && registers[0x42]==0);
     Put16(registers+0x08,-123); Put16(registers+0x0A,981); Put16(registers+0x14,-32);
     Put16(registers+0x20,16384); registers[0x34]=0xFE; registers[0x35]=0xFF; registers[0x39]=5;
@@ -110,6 +131,11 @@ static void TestBnoAndMux(void)
     for(unsigned i=0;i<100 && !sensor.configured;++i) { Bno055_Service(&sensor); tick+=20; }
     CHECK(sensor.configured && sensor.calibration_available);
     CHECK(registers[0x55]==1 && registers[0x6A]==22);
+
+    /* A single BNO055 can be wired directly to the I2C bus without a mux. */
+    Bno055 direct={0};
+    CHECK(Bno055_InitObject(&direct,&bus,&clock,NULL,0x28,0,APP_IMU_NODE_C0)==APP_STATUS_OK);
+    CHECK(Bno055_Probe(&direct)==APP_STATUS_OK && direct.present);
 }
 static void MockRxEvent(UART_HandleTypeDef *uart, uint16_t reported, uint16_t actual)
 {
@@ -194,7 +220,7 @@ static void Fixtures(void)
 int main(int argc,char **argv)
 {
     if(argc==2 && strcmp(argv[1],"--fixtures")==0) { Fixtures(); return 0; }
-    TestProtocol(); TestBnoAndMux(); TestUart(); TestTime();
+    TestProtocol(); TestSamplePublishGate(); TestBnoAndMux(); TestUart(); TestTime();
     puts("PASS: production protocol, BNO055/TCA state/recovery, dual UART ring/TX, timer wrap (mock HAL)");
     return 0;
 }
