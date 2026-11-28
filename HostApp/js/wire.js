@@ -1,6 +1,14 @@
-// Firmware v1, little endian. This byte framer does not decode binary as text.
-// A synchronization pair selects binary mode; otherwise a newline selects
-// legacy text. Corrupt binary payloads must never become text on a 0x0A byte.
+// Firmware v1, little endian. A serial connection may start inside a frame.
+const legacyDecoder = new TextDecoder("utf-8", { fatal: true });
+
+function readLegacyLine(bytes) {
+  let line;
+  try { line = legacyDecoder.decode(Uint8Array.from(bytes)).trim(); }
+  catch { return null; }
+  if (/[\x00-\x08\x0b-\x1f\x7f]/.test(line)) return null;
+  return /^(?:\{|IMU\s*,|[+\-\d.][^,]*,)/i.test(line) ? line : null;
+}
+
 export function crc16(bytes) {
   let crc = 0xffff;
   for (const byte of bytes) {
@@ -40,7 +48,7 @@ export function decodePacket(bytes) {
     if (valid && norm < 1) throw new Error("有效帧四元数为零");
     const q = valid ? Object.fromEntries(["w", "x", "y", "z"].map((axis, i) => [axis, raw[i] / norm])) : null;
     const rawCal = bytes[p + 37];
-    samples.push({ node, flags, valid, q, timestampStartUs: view.getUint32(p + 4, true),
+    samples.push({ node, flags, valid, q, quaternionNorm: norm / 16384, timestampStartUs: view.getUint32(p + 4, true),
       timestampEndUs: view.getUint32(p + 8, true), timestampUs: view.getUint32(p + 12, true),
       acceleration: valid ? [0, 1, 2].map((i) => view.getInt16(p + 24 + i * 2, true) / 100) : null,
       gyroscope: valid ? [0, 1, 2].map((i) => view.getInt16(p + 30 + i * 2, true) / 16) : null,
@@ -87,15 +95,18 @@ export class TelemetryFramer {
   }
   drain() {
     while (this.buffer.length) {
-      if (this.mode === "text") {
-        if (this.buffer.at(-1) !== 10) return;
-        this.onLine?.(new TextDecoder().decode(new Uint8Array(this.buffer)).trim()); this.buffer = []; return;
-      }
-      const magic = this.buffer.findIndex((b, i) => b === 0xa5 && this.buffer[i + 1] === 0x5a);
+      // A5 5A can occur inside UTF-8 text. Require the version byte on initial sync.
+      const magic = this.buffer.findIndex((b, i) => b === 0xa5 && this.buffer[i + 1] === 0x5a &&
+        (this.mode === "binary" || this.buffer[i + 2] === 1));
       if (magic < 0) {
         if (this.mode === "binary") { this.buffer = this.buffer.at(-1) === 0xa5 ? [0xa5] : []; return; }
-        // Before locking to binary, allow ordinary legacy NDJSON/CSV lines.
-        if (this.buffer.at(-1) === 10) { this.mode = "text"; continue; }
+        // A newline may be part of a truncated binary packet. Legacy records
+        // are handled one line at a time without disabling frame sync.
+        if (this.buffer.at(-1) === 10) {
+          const line = readLegacyLine(this.buffer);
+          this.buffer = [];
+          if (line !== null) this.onLine?.(line);
+        }
         return;
       }
       if (magic) this.buffer.splice(0, magic);

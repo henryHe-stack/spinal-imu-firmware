@@ -119,7 +119,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/self-check.ps1 -Port C
 ├─ src/
 │  ├─ stm32/                   主固件、CubeMX 配置、驱动和 FreeRTOS
 │  ├─ host_core/               C 算法、协议、模拟器和测试
-│  ├─ HostApp/                 三维界面及 Windows 桌面壳源码
+│  ├─ HostApp/                 Windows 桌面壳和 D0 预览解析
 │  ├─ pc_f103_dashboard/       正式测量、配置、记录与回放源码
 │  ├─ self_check/              独立自检与报告工具源码
 │  └─ data/                    示例 BIN 和回归测试固定输入
@@ -132,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/self-check.ps1 -Port C
 
 桌面程序构建使用 Windows 主机版 GCC 和系统 .NET Framework C# 编译器。主固件及自检构建使用 ARM GCC，主固件同时使用 CMake 和 Ninja。STM32CubeIDE 可提供 ARM 工具链、CMake 和 Ninja，CubeMX 用于编辑 src/stm32/Spinal_tester.ioc。
 
-WebView2 SDK 1.0.2903.40 已固定在 dependencies 目录，Three.js、控制器和字体均在 src/HostApp/vendor。桌面构建会从 C 源码编译解算 DLL 和模拟器，再生成一体版 EXE。以下命令均在 `workstation/` 目录执行。
+WebView2 SDK 1.0.2903.40 已固定在 dependencies 目录。桌面构建从 [仓库根目录的 HostApp](../HostApp/README.md) 复制三维页面、Three.js、控制器和字体，并编译解算 DLL 和模拟器，生成一体版 EXE。以下命令均在 `workstation/` 目录执行。
 
 ```powershell
 # 构建桌面工作站，更新 app
@@ -161,7 +161,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test.ps1 -Suite All
 
 桌面窗口交互检查运行 powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-desktop.ps1。先运行 Host 测试以生成测试用原始帧记录。窗口检查覆盖模型、曲线、串口选择框、CSV 保存、测量模拟、BIN 回放和共用数据流。
 
-三维页面交互测试位于 src/HostApp/tests。前端开发可在 src/HostApp 下运行 npm ci、npm test 和 npm run test:ui。日常使用运行 app 下的 Windows 工作站。
+三维页面交互测试位于仓库根目录的 HostApp/tests。前端开发可在该 HostApp 目录运行 npm ci、npm test 和 npm run test:ui。D0 预览解析的测试位于 workstation/src/HostApp/tests/local-wire.test.mjs。
 
 ## 第三方组件
 

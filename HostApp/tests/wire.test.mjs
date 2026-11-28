@@ -30,6 +30,20 @@ test("binary samples survive every transport split, embedded newline and glued r
   }
 });
 
+test("a connection starting mid-frame recovers the next sample and command reply", () => {
+  const sample = bytes(fixture.sample), frames = [], replies = [], lines = [];
+  const framer = new TelemetryFramer({ onFrame: (f) => frames.push(f), onReply: (r) => replies.push(r), onLine: (l) => lines.push(l) });
+  // Start one byte before a newline in the binary payload, not at its header.
+  const start = sample.indexOf(0x0a, 6) - 1;
+  assert.ok(start >= 6);
+  framer.push(Uint8Array.from([...sample.subarray(start), sample[0]]));
+  framer.push(Uint8Array.from([...sample.subarray(1), ...bytes(fixture.reply)]));
+  assert.deepEqual(frames.map((f) => f.sequence), [42]);
+  assert.deepEqual(frames[0].samples.map((s) => s.node), ["C0", "C4", "C7"]);
+  assert.deepEqual(replies.map((r) => r.requestId), [0x12345678]);
+  assert.deepEqual(lines, []);
+});
+
 test("invalid nodes stay null and valid zero/duplicate/corrupt packets are rejected", () => {
   const invalid = bytes(fixture.sample); invalid[13] = 4; // sample0.flags, low byte.
   const frame = decodePacket(repair(invalid));
@@ -57,6 +71,17 @@ test("legacy text stays available and overlong input is bounded", () => {
   assert.deepEqual(lines, ['{"seq":1}', "IMU,2,C0,0,1,0,0,0,3"]);
   framer.push(new Uint8Array(9000).fill(65));
   assert.ok(errors.length >= 2); assert.ok(framer.buffer.length <= 4096);
+});
+
+test("UTF-8 legacy records remain readable without blocking later binary sync", () => {
+  const frames = [], lines = [];
+  const framer = new TelemetryFramer({ onLine: (l) => lines.push(l), onFrame: (f) => frames.push(f) });
+  // The UTF-8 bytes of this label include A5 5A, but no binary v1 header.
+  const line = '{"seq":1,"node":"C0","q":[1,0,0,0],"label":"\u00a5Z"}';
+  framer.push(new TextEncoder().encode(`${line}\r\n`));
+  framer.push(bytes(fixture.sample));
+  assert.deepEqual(lines, [line]);
+  assert.deepEqual(frames.map((f) => f.sequence), [42]);
 });
 
 test("node clocks align across intra-frame wrap and reboot is distinct from wrap", () => {

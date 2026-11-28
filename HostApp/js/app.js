@@ -1,5 +1,7 @@
 import { DemoSource } from "./demo.js";
+import { attachMeasurement, DesktopSerialSource, desktopHost } from "./desktop.js";
 import { applyNeutral, quaternionAngleDegrees, quaternionToEulerDegrees, relativeQuaternion } from "./math.js";
+import { captureSegmentReference, parseRegistration, segmentPose } from "./neck-relative.js";
 import { NODE_IDS, parseTelemetryLine, validateCompleteFrame } from "./protocol.js";
 import { SerialSource } from "./serial.js";
 import { PoseTimeline } from "./timeline.js";
@@ -30,12 +32,17 @@ const state = {
   lastSequence: null, lastHistorySequence: null, framesThisWindow: 0, rateWindowAt: performance.now(), rows: [], dataGap: false,
 };
 const pendingCommands = new Map();
+const segmentRows = new Map([...document.querySelectorAll("[data-segment]")].map((row) => [row.dataset.segment, [...row.querySelectorAll("td")]]));
+let registration = null, segmentReference = null, sourceEpoch = 0;
 
 function beginSource() {
   // A newly connected device may reuse a sequence seen in an older session.
   // Never assemble its partial frame using previous devices' node samples.
   state.latest = {}; state.nodeSequences = {};
   state.lastSequence = null; state.lastHistorySequence = null; state.dataGap = true;
+  sourceEpoch += 1;
+  segmentReference = null;
+  renderSegments(null);
 }
 
 const timeline = new PoseTimeline({
@@ -62,8 +69,8 @@ function showToast(message) {
 function setConnection(mode, label) {
   state.mode = mode;
   elements.connection.textContent = label;
-  elements.lamp.className = `status-lamp ${mode === "serial" || mode === "demo" ? "status-live" : mode === "error" ? "status-error" : "status-idle"}`;
-  elements.connect.querySelector("span:last-child").textContent = mode === "serial" ? "断开串口" : "连接串口";
+  elements.lamp.className = `status-lamp ${mode === "serial" || mode === "demo" || mode === "measure" ? "status-live" : mode === "error" ? "status-error" : "status-idle"}`;
+  elements.connect.querySelector("span:last-child").textContent = mode === "measure" ? "查看正式测量" : mode === "serial" ? "断开串口" : "连接串口";
   elements.demo.textContent = mode === "demo" ? "停止模拟数据" : "运行模拟数据";
 }
 
@@ -106,14 +113,29 @@ function updateRelativeAngles(samples) {
   }
 }
 
+function renderSegments(snapshot) {
+  const desktopMeasure = state.mode === "measure";
+  const reference = snapshot?.sourceEpoch === segmentReference?.epoch ? segmentReference?.pairs : null;
+  const result = snapshot && !desktopMeasure ? segmentPose(snapshot, registration, reference) : null;
+  $("#segmentState").textContent = desktopMeasure ? "角度见正式测量页" : !result ? "等待三节点" :
+    `${registration ? "已加载配准" : "未配准 · 工程预览"} / ${reference ? "相对中立位" : "未归零"}`;
+  for (const [key, cells] of segmentRows) {
+    const pair = result?.[key];
+    for (const [index, axis] of ["flexion", "lateral", "axial"].entries())
+      cells[index].textContent = pair?.signed ? formatAngle(pair.signed[axis]) : "—";
+    cells[3].textContent = pair ? pair.reason || "有效" : "—";
+  }
+}
+
 function renderSnapshot(snapshot, immediate = false) {
   if (!snapshot) return;
   const adjusted = {};
-  const displayMode = timeline.live ? "实时" : "回放";
+  const displayMode = timeline.live && state.measureKind !== "REPLAY" ? "实时" : "回放";
   for (const node of NODE_IDS) adjusted[node] = updateCard(node, snapshot.samples[node], immediate, displayMode);
   spineView.update(adjusted, immediate);
   updateRelativeAngles(adjusted);
-  elements.modelState.textContent = timeline.live ? "驾驶员三节点实时驱动" : "历史姿态回放";
+  renderSegments(snapshot);
+  elements.modelState.textContent = displayMode === "实时" ? "驾驶员三节点实时驱动" : "历史姿态回放";
   elements.timestamp.textContent = Number.isFinite(snapshot.timestampUs) ? `${(snapshot.timestampUs / 1_000_000).toFixed(3)} s` : "—";
 }
 
@@ -125,16 +147,17 @@ function buildCompleteSnapshot(frame) {
   const timestampUs = Math.max(...NODE_IDS.map((node) => samples[node].timestampUs));
   return {
     sequence: frame.sequence, timestampUs, receivedAt: Date.now(), samples, vectorUnits: frame.vectorUnits,
-    dataGap: state.dataGap,
+    dataGap: state.dataGap, sourceEpoch,
     angleDegrees: quaternionAngleDegrees(relativeQuaternion(samples.C7.q, samples.C0.q)),
   };
 }
 
 function processFrame(frame, rawLine = "") {
+  state.lastFrameAt = performance.now();
   if (state.lastSequence !== null && frame.sequence !== state.lastSequence) {
     const delta = (frame.sequence - state.lastSequence) >>> 0;
     if (delta < 0x80000000) state.lostCount += delta - 1;
-    else { state.lastHistorySequence = null; state.dataGap = true; }
+    else { state.lastHistorySequence = null; state.dataGap = true; sourceEpoch += 1; segmentReference = null; }
     if (delta !== 1) state.dataGap = true;
   }
   state.lastSequence = frame.sequence;
@@ -151,6 +174,7 @@ function processFrame(frame, rawLine = "") {
     // A single-node bring-up stream remains visible before all three nodes
     // have produced a matching acquisition cycle for model reconstruction.
     for (const sample of frame.samples) updateCard(sample.node, sample, false, "实时");
+    renderSegments(null);
     if (frame.samples.some((sample) => sample.valid === false)) {
       elements.modelState.textContent = "节点未就绪 · 保留上次完整姿态";
       for (const id of ["c0c4Angle", "c4c7Angle", "c0c7Angle"]) $(`#${id}`).textContent = "—";
@@ -193,7 +217,7 @@ function handleLine(line) {
   }
 }
 
-const serial = new SerialSource({
+const serial = new (desktopHost ? DesktopSerialSource : SerialSource)({
   onLine: handleLine,
   onFrame: (frame) => processFrame(frame, `BINARY v1 · seq=${frame.sequence} · ${frame.samples.length} nodes`),
   onReply: (reply) => {
@@ -205,12 +229,55 @@ const serial = new SerialSource({
   onState: (serialState) => {
     if (serialState === "connected") beginSource();
     setConnection(serialState === "connected" ? "serial" : "idle", serialState === "connected" ? "串口采集中" : "等待连接");
+    if (serialState !== "connected" && timeline.live) renderSegments(null);
   },
   onError: (error) => { setConnection("error", "串口异常"); showToast(error.message); },
 });
 const demo = new DemoSource(processFrame);
 
+function markDesktopStale(label) {
+  if (!timeline.live) return;
+  for (const node of NODE_IDS) updateCard(node, { valid: false }, true, "等待数据");
+  for (const id of ["c0c4Angle", "c4c7Angle", "c0c7Angle"]) $("#"+id).textContent = "—";
+  elements.modelState.textContent = label;
+  renderSegments(null);
+}
+
+if (desktopHost) {
+  $(".device-commands").style.display = "none";
+  $("#desktopMeasurementHelp").hidden = false;
+  const resetMeasurement = () => {
+    beginSource();
+    Object.assign(state, { neutral: {}, rows: [], frameCount: 0, lostCount: 0, lastFrameAt: null });
+    timeline.reset(); curves.invalidate();
+    elements.frameCount.textContent = elements.lostCount.textContent = "0";
+    elements.timestamp.textContent = elements.syncSpan.textContent = "—";
+    markDesktopStale("等待三节点原始姿态");
+  };
+  attachMeasurement({
+    start(kind) {
+      demo.stop(); resetMeasurement();
+      state.measureKind = kind;
+      const label = kind === "SERIAL" ? "共用测量串口" : kind === "REPLAY" ? "正式测量 BIN 回放" : "测量算法模拟";
+      setConnection("measure", label);
+      elements.demo.disabled = true;
+    },
+    end() {
+      state.measureKind = null;
+      setConnection("idle", "测量已停止");
+      elements.demo.disabled = false;
+      markDesktopStale("测量已停止");
+    },
+    onBytes(count) { state.bytes += count; elements.byteCount.textContent = formatBytes(state.bytes); },
+    onFrame: processFrame,
+    onBoundary: resetMeasurement,
+    onIssue(message) { elements.latestLine.textContent = message; },
+  }).catch((error) => showToast(error.message));
+}
+
 elements.connect.addEventListener("click", async () => {
+  if (state.mode === "measure") { desktopHost.postMessage("measurement-tab"); return; }
+  elements.connect.disabled = elements.demo.disabled = true;
   try {
     if (state.mode === "serial") await serial.disconnect();
     else {
@@ -219,6 +286,8 @@ elements.connect.addEventListener("click", async () => {
     }
   } catch (error) {
     setConnection("error", "连接失败"); showToast(error.message);
+  } finally {
+    elements.connect.disabled = false; elements.demo.disabled = state.mode === "measure";
   }
 });
 
@@ -229,19 +298,44 @@ elements.demo.addEventListener("click", async () => {
 });
 
 elements.neutral.addEventListener("click", () => {
-  const reference = timeline.currentSnapshot()?.samples ?? state.latest;
-  if (!NODE_IDS.every((node) => reference[node]?.q)) { showToast("需要先接收到 C0、C4、C7 三个节点的有效数据"); return; }
+  const liveSerial = state.mode === "measure" && state.measureKind === "SERIAL";
+  const reference = timeline.live && liveSerial ? state.latest : timeline.currentSnapshot()?.samples ?? state.latest;
+  if ((timeline.live && liveSerial && performance.now() - state.lastFrameAt > 500) ||
+      !NODE_IDS.every((node) => reference[node]?.q)) { showToast("需要先接收到 C0、C4、C7 三个节点的有效数据"); return; }
   for (const node of NODE_IDS) state.neutral[node] = { ...reference[node].q };
+  const selected = timeline.currentSnapshot();
+  const pairs = state.mode !== "measure" && selected?.sourceEpoch === sourceEpoch &&
+    (!timeline.live || (performance.now() - state.lastFrameAt <= 500 && selected.sequence === state.lastSequence)) &&
+    captureSegmentReference(selected, registration);
+  if (pairs) segmentReference = { pairs, epoch: sourceEpoch };
   curves.invalidate();
   renderSnapshot(timeline.currentSnapshot(), true);
   timeline.draw();
   showToast("显示中的三节点姿态已设为中立位，曲线已同步更新");
 });
 
+async function setRegistration(file = null) {
+  try {
+    if (file?.size > 32_768) throw new Error("配准 JSON 超过 32 KB");
+    registration = file ? parseRegistration(JSON.parse(await file.text())) : null;
+    segmentReference = null;
+    const selected = timeline.currentSnapshot();
+    renderSegments(!timeline.live || (selected?.sourceEpoch === sourceEpoch && selected.sequence === state.lastSequence) ? selected : null);
+    showToast(file ? "已加载配准；分段角度需重新归零" : "已清除配准");
+  } catch (error) { showToast(`配准无效：${error.message}`); }
+}
+$("#segmentProfile").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (file) void setRegistration(file);
+  event.target.value = "";
+});
+$("#segmentProfileReset").addEventListener("click", () => { void setRegistration(); });
+
 elements.export.addEventListener("click", () => {
   if (!state.rows.length) { showToast("当前没有可导出的采集数据"); return; }
   const header = "received_at,sequence,node,timestamp_us,qw,qx,qy,qz,roll_deg,pitch_deg,yaw_deg,calibration,flags\n";
   const csv = header + state.rows.map((row) => row.join(",")).join("\n");
+  if (desktopHost) { desktopHost.postMessage("csv\n" + csv); return; }
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   link.download = `spinal_imu_${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
@@ -250,12 +344,15 @@ elements.export.addEventListener("click", () => {
 
 window.setInterval(() => {
   const now = performance.now();
+  if (state.mode === "measure" && state.measureKind === "SERIAL" && state.lastFrameAt !== null && now - state.lastFrameAt > 500)
+    markDesktopStale("等待新帧");
+  if (state.mode === "serial" && timeline.live && now - state.lastFrameAt > 500) renderSegments(null);
   const seconds = (now - state.rateWindowAt) / 1000;
   elements.sampleRate.textContent = (state.framesThisWindow / seconds).toFixed(1);
   state.framesThisWindow = 0; state.rateWindowAt = now;
 }, 1000);
 
-if (!SerialSource.supported()) elements.connect.title = "需要桌面版 Chrome 或 Edge 的 Web Serial 支持";
+if (!desktopHost && !SerialSource.supported()) elements.connect.title = "需要桌面版 Chrome 或 Edge 的 Web Serial 支持";
 let requestId = 0;
 document.querySelectorAll("[data-device-command]").forEach((button) => button.addEventListener("click", async () => {
   if (state.mode !== "serial") { showToast("设备命令需要连接真实串口"); return; }

@@ -38,9 +38,11 @@ function normalizeNode(value) {
 }
 
 function normalizeSample(input) {
+  const timestamp = input.timestamp_us ?? input.timestampUs ?? input.t;
   return {
     node: normalizeNode(input.node ?? input.id ?? input.node_id),
-    timestampUs: finiteNumber(input.timestamp_us ?? input.timestampUs ?? input.t ?? 0, "timestamp_us"),
+    timestampUs: finiteNumber(timestamp ?? 0, "timestamp_us"),
+    sampleTimeKnown: timestamp !== undefined && timestamp !== null && timestamp !== "",
     q: normalizeQuaternion(input.q ?? input.quaternion),
     acceleration: normalizeVector(input.acceleration ?? input.accel),
     gyroscope: normalizeVector(input.gyroscope ?? input.gyro),

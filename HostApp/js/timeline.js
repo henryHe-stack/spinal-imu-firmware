@@ -32,6 +32,16 @@ export class PoseTimeline {
     new ResizeObserver(() => this.draw()).observe(canvas);
   }
 
+  reset() {
+    this.history = []; this.live = true; this.index = 0;
+    this.stopPlayback();
+    this.range.value = this.range.max = "0"; this.range.disabled = true;
+    this.count.textContent = "0"; this.current.textContent = this.hostTime.textContent = "—";
+    delete this.current.dataset.sequence;
+    for (const button of [this.playButton, this.previousButton, this.nextButton]) button.disabled = true;
+    this.renderTicks(); this.draw();
+  }
+
   add(snapshot) {
     this.history.push({ ...snapshot, ...sessionPosition(this.history.at(-1), snapshot), historyId: this.nextId++ });
     let expiredSelection = false;

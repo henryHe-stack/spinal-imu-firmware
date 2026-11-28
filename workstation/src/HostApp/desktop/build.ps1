@@ -3,6 +3,7 @@ $ErrorActionPreference='Stop'
 $ui=(Get-Item -LiteralPath $PSScriptRoot).Parent.FullName
 $project=(Get-Item -LiteralPath $ui).Parent.FullName
 $repository=Split-Path -Parent $project
+$sharedUi=Join-Path (Split-Path -Parent $repository) 'HostApp'
 $out=if($OutputDirectory){[IO.Path]::GetFullPath($OutputDirectory)}else{Join-Path $repository 'app'}
 if(-not $SdkPackage){$SdkPackage=Join-Path $repository 'dependencies/Microsoft.Web.WebView2.1.0.2903.40.nupkg'}
 if(-not $Gcc) {
@@ -15,7 +16,8 @@ if ((Get-FileHash -LiteralPath $SdkPackage -Algorithm SHA256).Hash -ne 'EF128016
 [void][IO.Directory]::CreateDirectory($out)
 $assets=Join-Path $out 'ui'
 [void][IO.Directory]::CreateDirectory($assets)
-foreach($name in 'js','vendor','index.html','styles.css','favicon.svg'){Copy-Item -LiteralPath (Join-Path $ui $name) -Destination $assets -Recurse -Force}
+foreach($name in 'js','vendor','index.html','styles.css','favicon.svg'){Copy-Item -LiteralPath (Join-Path $sharedUi $name) -Destination $assets -Recurse -Force}
+Copy-Item -LiteralPath (Join-Path $ui 'js/local-wire.js') -Destination (Join-Path $assets 'js/local-wire.js') -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip=[IO.Compression.ZipFile]::OpenRead($SdkPackage)
 try {

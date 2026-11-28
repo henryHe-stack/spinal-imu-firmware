@@ -25,6 +25,28 @@ async function openBinary(page) {
   return errors;
 }
 
+test("C0-only v1 stays live and signed segment readings require the relevant sensors", async ({ page }) => {
+  const errors = await openBinary(page);
+  const frame = Uint8Array.from(binaryFrame(1));
+  frame[53] = 4; frame[93] = 4;
+  new DataView(frame.buffer).setUint16(frame.length - 2, crc16(frame.subarray(2, -2)), true);
+  await page.evaluate((data) => window.testSerialReceive(data), [...frame]);
+  await expect(page.locator('[data-node="C0"] .node-state')).toHaveText("实时");
+  await expect(page.locator('#segmentState')).toHaveText("等待三节点");
+  await page.evaluate((data) => window.testSerialReceive(data), binaryFrame(2));
+  await expect(page.locator('#segmentState')).toContainText("未配准");
+  await page.locator('#segmentPanel summary').click();
+  await expect(page.locator('[data-segment="base"] td').last()).toHaveText("有效");
+  await page.locator('#neutralButton').click();
+  await expect(page.locator('#segmentState')).toContainText("相对中立位");
+  await expect(page.locator('[data-segment="base"] td').first()).toHaveText("+0.0°");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('#segmentPanel').evaluate((panel) => panel.scrollWidth <= panel.clientWidth)).toBe(true);
+  await page.locator('#connectButton').click();
+  await expect(page.locator('#segmentState')).toHaveText("等待三节点");
+  expect(errors).toEqual([]);
+});
+
 test("binary startup and recovery preserve the last complete pose and physical units", async ({ page }) => {
   const errors = await openBinary(page);
   await page.evaluate((data) => window.testSerialReceive(data), binaryFrame(1, true));
