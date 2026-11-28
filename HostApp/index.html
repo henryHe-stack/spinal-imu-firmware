@@ -109,6 +109,19 @@
             <div><span>C4 → C7 相对角</span><strong id="c4c7Angle">—</strong></div>
             <div><span>C0 → C7 总相对角</span><strong id="c0c7Angle">—</strong></div>
           </footer>
+          <details class="segment-panel" id="segmentPanel">
+            <summary>分段角度 <span id="segmentState">等待三节点</span></summary>
+            <table aria-label="分段有符号角度（度）">
+              <thead><tr><th scope="col">区段</th><th scope="col">屈伸</th><th scope="col">侧屈</th><th scope="col">轴向</th><th scope="col">数据状态</th></tr></thead>
+              <tbody>
+                <tr data-segment="overall"><th scope="row">整体 C0/C7</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr data-segment="upper"><th scope="row">上段 C0/C4</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr data-segment="lower"><th scope="row">下段 C4/C7</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+                <tr data-segment="base"><th scope="row">基部 C7</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+              </tbody>
+            </table>
+            <div class="segment-config"><label for="segmentProfile">配准配置</label><input id="segmentProfile" type="file" accept=".json,application/json"><button type="button" class="text-button" id="segmentProfileReset">清除配准</button></div>
+          </details>
           <section class="timeline-panel" aria-label="姿态时间轴">
             <header>
               <div><h3>姿态回看</h3><span class="timeline-description">选择时间，联动查看模型、曲线与节点姿态</span></div>
@@ -222,6 +235,7 @@
           <div class="quality-item"><span>串口字节</span><strong id="byteCount">0 B</strong><small>本次连接累计接收</small></div>
           <div class="stream-log"><span>最近数据</span><code id="latestLine">尚未接收串口数据。</code></div>
         </div>
+        <p id="desktopMeasurementHelp" hidden>正式测量与记录 · D0</p>
         <div class="device-commands" aria-label="设备控制">
           <button class="text-button" type="button" data-device-command="1">开始上传</button>
           <button class="text-button" type="button" data-device-command="2">停止上传</button>
