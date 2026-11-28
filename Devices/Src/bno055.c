@@ -14,7 +14,7 @@ AppStatus Bno055_InitObject(Bno055 *self,
                             uint8_t tca_channel,
                             AppImuNodeId node_id)
 {
-    if ((self == NULL) || (bus == NULL) || (timebase == NULL) || (mux == NULL))
+    if ((self == NULL) || (bus == NULL) || (timebase == NULL))
     {
         return APP_STATUS_INVALID_ARGUMENT;
     }
@@ -31,17 +31,28 @@ AppStatus Bno055_InitObject(Bno055 *self,
     return APP_STATUS_OK;
 }
 
+/* The same BNO055 driver supports both topologies:
+ *   - mux != NULL: select one TCA9548A channel before every transaction;
+ *   - mux == NULL: access a single BNO055 directly on the I2C bus.
+ */
+static AppStatus SelectPath(Bno055 *self)
+{
+    if (self == NULL || self->bus == NULL) return APP_STATUS_NOT_INITIALIZED;
+    return self->mux == NULL ? APP_STATUS_OK :
+        Tca9548a_SelectChannel(self->mux, self->tca_channel);
+}
+
 AppStatus Bno055_Probe(Bno055 *self)
 {
     uint8_t chip_id = 0U;
     AppStatus status;
 
-    if ((self == NULL) || (self->bus == NULL) || (self->mux == NULL))
+    if ((self == NULL) || (self->bus == NULL))
     {
         return APP_STATUS_NOT_INITIALIZED;
     }
 
-    status = Tca9548a_SelectChannel(self->mux, self->tca_channel);
+    status = SelectPath(self);
     if (status != APP_STATUS_OK)
     {
         return status;
@@ -66,13 +77,13 @@ AppStatus Bno055_Probe(Bno055 *self)
  * Docs/DRIVER_BRINGUP.md. No dependency on the Bosch global-device API. */
 static AppStatus Write(Bno055 *self, uint8_t reg, uint8_t value)
 {
-    AppStatus result = Tca9548a_SelectChannel(self->mux, self->tca_channel);
+    AppStatus result = SelectPath(self);
     if (result != APP_STATUS_OK) return result;
     return BspI2c_WriteRegister(self->bus, self->address_7bit, reg, &value, 1);
 }
 static AppStatus Read(Bno055 *self, uint8_t reg, uint8_t *data, size_t length)
 {
-    AppStatus result = Tca9548a_SelectChannel(self->mux, self->tca_channel);
+    AppStatus result = SelectPath(self);
     if (result != APP_STATUS_OK) return result;
     return BspI2c_ReadRegister(self->bus, self->address_7bit, reg, data, length);
 }
@@ -109,7 +120,7 @@ AppStatus Bno055_Service(Bno055 *self)
         case 10:
             if (self->calibration_available)
             {
-                status = Tca9548a_SelectChannel(self->mux, self->tca_channel);
+                status = SelectPath(self);
                 if (status == APP_STATUS_OK) status = BspI2c_WriteRegister(self->bus,
                     self->address_7bit, 0x55, self->calibration, sizeof(self->calibration));
             }

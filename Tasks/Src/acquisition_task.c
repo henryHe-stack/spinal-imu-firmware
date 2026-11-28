@@ -42,10 +42,19 @@ void AcquisitionTask_Entry(void *argument)
                 .status=(uint8_t)status,.destination=command.source};
             if (xQueueSend(context->reply_queue,&reply,0)!=pdPASS) DiagnosticsService_Increment(APP_DIAG_REPLY_DROP);
         }
-        if (SensorService_ReadCycle(context->sensor_service,&frame)!=APP_STATUS_OK)
+        AppStatus sensor_status=SensorService_ReadCycle(context->sensor_service,&frame);
+        if (sensor_status!=APP_STATUS_OK)
             DiagnosticsService_Increment(APP_DIAG_SENSOR_READ_ERROR);
-        if (streaming && xQueueSend(context->sample_queue,&frame,0)!=pdPASS)
-            DiagnosticsService_Increment(APP_DIAG_SAMPLE_QUEUE_DROP);
+        /* Do not couple transmission to the aggregate service status. A
+         * single healthy node is enough to publish a frame; invalid nodes
+         * remain in their fixed slots with SENSOR_ERROR for the host to see.
+         * An all-invalid frame is suppressed so the PC cannot mistake a
+         * zero-filled placeholder for a real measurement. */
+        if (streaming && SensorService_FrameHasValidSample(&frame))
+        {
+            if (xQueueSend(context->sample_queue,&frame,0)!=pdPASS)
+                DiagnosticsService_Increment(APP_DIAG_SAMPLE_QUEUE_DROP);
+        }
         DiagnosticsService_Heartbeat(APP_HEARTBEAT_ACQUISITION);
         TickType_t period=pdMS_TO_TICKS(period_ms), now=xTaskGetTickCount();
         if ((TickType_t)(now-wake)>=period)
