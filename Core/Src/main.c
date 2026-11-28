@@ -24,6 +24,9 @@
 /* USER CODE BEGIN Includes */
 #include "app_bootstrap.h"
 #include "bsp_time.h"
+#if defined(SPINAL_I2C_DIAG)
+#include "i2c_diagnostic.h"
+#endif
 
 /* USER CODE END Includes */
 
@@ -104,6 +107,30 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+
+#if defined(SPINAL_I2C_DIAG)
+  MX_DMA_Init();
+  MX_USART1_UART_Init();
+  MX_I2C1_Init();
+  I2cDiagnostic_Run(&hi2c1, &huart1);
+#endif
+
+#if defined(SPINAL_UART_SMOKE) && SPINAL_UART_SMOKE
+  static const uint8_t message[] = "STM32 UART TEST OK\r\n";
+
+  /* UART MSP setup needs the DMA clock even though this test uses polling. */
+  MX_DMA_Init();
+  MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
+
+  /* Bound each send so a failed port does not block testing the other one. */
+  for (;;)
+  {
+    (void)HAL_UART_Transmit(&huart1, message, sizeof(message) - 1U, 20U);
+    (void)HAL_UART_Transmit(&huart2, message, sizeof(message) - 1U, 20U);
+    HAL_Delay(1000U);
+  }
+#endif
 
   /* USER CODE END SysInit */
 

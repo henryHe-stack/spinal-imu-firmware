@@ -3,6 +3,10 @@
 依据 2026-11-17 原理图实现。当前完成软件实现与主机验证，以下硬件验收均待执行。
 不包含 MCU 端颈部运动算法，也未实施电池电量估算或充电状态采样。
 
+v0.1.0.3 仍默认走 TCA9548A 三节点拓扑，BNO055 默认使用内部振荡器（不同于下文历史基线），每轮至少有一颗 IMU 有效才发送采样帧。单颗直连台架可用 C 编译定义 `APP_USE_TCA9548A=0`，该模式不读写三节点 Flash 校准参数。
+
+需要排查链路时可分别以 `cmake --preset Debug -B build/uart-smoke -DSPINAL_UART_SMOKE=ON` 和 `cmake --preset Debug -B build/i2c-diag -DSPINAL_I2C_DIAG=ON` 配置独立诊断镜像，再用 `cmake --build` 构建对应目录。前者在双串口发送固定文本，后者通过 USART1 输出 TCA 通道、BNO055 地址与芯片 ID；两种诊断选项不可同时启用，常规烧录应选正常固件。
+
 ## 1. 外设和接线
 
 | 模块 | 配置 | 任务/接口 |
